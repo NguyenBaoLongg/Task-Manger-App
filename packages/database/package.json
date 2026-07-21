@@ -1,0 +1,28 @@
+{
+  "name": "@adsup/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "prisma:generate": "prisma generate --config prisma.config.ts",
+    "prisma:migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
+    "prisma:seed": "prisma db seed --config prisma.config.ts",
+    "prisma:verify-kpi-seed": "node --import tsx prisma/verify-kpi-seed.ts"
+  },
+  "dependencies": {
+    "@adsup/config": "workspace:*",
+    "@adsup/domain": "workspace:*",
+    "@prisma/adapter-pg": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "pg": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.0.0",
+    "prisma": "^7.0.0",
+    "tsx": "^4.0.0"
+  }
+}

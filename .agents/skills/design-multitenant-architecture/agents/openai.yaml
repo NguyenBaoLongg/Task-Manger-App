@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multi-tenant Architecture"
+  short_description: "Design secure multi-tenant SaaS foundations"
+  default_prompt: "Use $design-multitenant-architecture to design the backend, database, RBAC, storage, realtime, and notification foundations."

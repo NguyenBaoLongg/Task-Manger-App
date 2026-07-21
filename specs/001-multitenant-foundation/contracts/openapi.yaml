@@ -1,0 +1,1380 @@
+openapi: 3.1.0
+info:
+  title: Adsup Multi-tenant Foundation API
+  version: 1.0.0
+  description: Stable Module 1 contract. All tenant paths re-authorize active membership and scope.
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: Health
+  - name: Auth
+  - name: Tenants
+  - name: Organization
+  - name: RBAC
+  - name: Forms
+  - name: Chat
+  - name: Notifications
+  - name: Media
+  - name: Audit
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      security: []
+      responses:
+        '200':
+          description: Required dependencies are ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /v1/auth/google:
+    post:
+      tags: [Auth]
+      operationId: authenticateWithGoogle
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idToken]
+              properties:
+                idToken: { type: string, minLength: 20, maxLength: 8192 }
+                deviceLabel: { type: string, maxLength: 120 }
+      responses:
+        '200':
+          description: Authenticated; profileComplete controls access to tenant mutations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResult' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string, minLength: 32, maxLength: 2048 }
+      responses:
+        '200':
+          description: Rotated token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+  /v1/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutSession
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Current session revoked }
+        '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+  /v1/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+    patch:
+      tags: [Auth]
+      operationId: confirmCurrentUserProfile
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fullName]
+              properties:
+                fullName: { type: string, minLength: 2, maxLength: 120 }
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /v1/me/tenants:
+    get:
+      tags: [Tenants]
+      operationId: listCurrentUserTenants
+      responses:
+        '200':
+          description: Active and historical memberships visible to current user
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TenantMembershipSummary' }
+
+  /v1/tenants:
+    post:
+      tags: [Tenants]
+      operationId: createTenant
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, timezone]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 160 }
+                timezone: { type: string, minLength: 3, maxLength: 64 }
+      responses:
+        '201':
+          description: Tenant and owner membership created atomically
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantMembershipSummary' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/invitations/accept:
+    post:
+      tags: [Tenants]
+      operationId: acceptInvitation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 20, maxLength: 512 }
+      responses:
+        '201':
+          description: Membership created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantMembershipSummary' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+        '410': { $ref: '#/components/responses/GoneProblem' }
+
+  /v1/tenants/{tenantId}:
+    get:
+      tags: [Tenants]
+      operationId: getTenant
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Tenant details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '404': { $ref: '#/components/responses/NotFoundProblem' }
+    patch:
+      tags: [Tenants]
+      operationId: updateTenantStatus
+      x-permission: tenant.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTenantStatus' }
+      responses:
+        '200':
+          description: Tenant lifecycle state updated with audit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/invitations:
+    post:
+      tags: [Tenants]
+      operationId: createInvitation
+      x-permission: member.invite
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateInvitation' }
+      responses:
+        '201':
+          description: Plain token is returned once
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationCreated' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+    get:
+      tags: [Tenants]
+      operationId: listInvitations
+      x-permission: member.invite
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Invitations without token hashes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Invitation' }
+  /v1/tenants/{tenantId}/invitations/{invitationId}/revoke:
+    post:
+      tags: [Tenants]
+      operationId: revokeInvitation
+      x-permission: member.invite
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Revoked or existing idempotent result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '404': { $ref: '#/components/responses/NotFoundProblem' }
+
+  /v1/tenants/{tenantId}/branches:
+    get:
+      tags: [Organization]
+      operationId: listBranches
+      x-permission: tenant.read
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Tenant branches
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnitList' }
+    post:
+      tags: [Organization]
+      operationId: createBranch
+      x-permission: branch.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBranch' }
+      responses:
+        '201':
+          description: Branch created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnit' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/branches/{branchId}:
+    patch:
+      tags: [Organization]
+      operationId: updateBranchStatus
+      x-permission: branch.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: branchId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOrganizationUnitStatus' }
+      responses:
+        '200':
+          description: Branch lifecycle state updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnit' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/departments:
+    get:
+      tags: [Organization]
+      operationId: listDepartments
+      x-permission: tenant.read
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Tenant departments
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnitList' }
+    post:
+      tags: [Organization]
+      operationId: createDepartment
+      x-permission: organization.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrganizationUnit' }
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnit' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
+  /v1/tenants/{tenantId}/departments/{departmentId}:
+    patch:
+      tags: [Organization]
+      operationId: updateDepartmentStatus
+      x-permission: organization.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: departmentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOrganizationUnitStatus' }
+      responses:
+        '200':
+          description: Department lifecycle state updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnit' }
+  /v1/tenants/{tenantId}/positions:
+    get:
+      tags: [Organization]
+      operationId: listPositions
+      x-permission: tenant.read
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Tenant positions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnitList' }
+    post:
+      tags: [Organization]
+      operationId: createPosition
+      x-permission: organization.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrganizationUnit' }
+      responses:
+        '201':
+          description: Position created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnit' }
+
+  /v1/tenants/{tenantId}/positions/{positionId}:
+    patch:
+      tags: [Organization]
+      operationId: updatePositionStatus
+      x-permission: organization.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: positionId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOrganizationUnitStatus' }
+      responses:
+        '200':
+          description: Position lifecycle state updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationUnit' }
+  /v1/tenants/{tenantId}/memberships:
+    get:
+      tags: [RBAC]
+      operationId: listMemberships
+      x-permission: member.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Cursor-paginated memberships
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MembershipPage' }
+  /v1/tenants/{tenantId}/memberships/{membershipId}:
+    patch:
+      tags: [RBAC]
+      operationId: updateMembership
+      x-permission: member.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                displayName: { type: string, minLength: 2, maxLength: 120 }
+                employeeCode: { type: [string, 'null'], maxLength: 40 }
+                status: { enum: [ACTIVE, SUSPENDED, LEFT] }
+                reason: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        '200':
+          description: Membership updated with audit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/memberships/{membershipId}/assignments:
+    get:
+      tags: [Organization]
+      operationId: listMembershipAssignments
+      x-permission: member.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/MembershipId'
+        - name: at
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Timestamp' }
+        - name: includeHistory
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Effective or historical assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Assignment' }
+    post:
+      tags: [Organization]
+      operationId: createAssignment
+      x-permission: member.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAssignment' }
+      responses:
+        '201':
+          description: Effective assignment created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Assignment' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+
+  /v1/tenants/{tenantId}/roles:
+    get:
+      tags: [RBAC]
+      operationId: listRoles
+      x-permission: role.read
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Roles and permission codes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Role' }
+    post:
+      tags: [RBAC]
+      operationId: createRole
+      x-permission: role.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRole' }
+      responses:
+        '201':
+          description: Custom role created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/memberships/{membershipId}/role-bindings:
+    post:
+      tags: [RBAC]
+      operationId: grantRoleBinding
+      x-permission: role.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRoleBinding' }
+      responses:
+        '201':
+          description: Role binding granted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleBinding' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+
+  /v1/tenants/{tenantId}/form-templates:
+    get:
+      tags: [Forms]
+      operationId: listFormTemplates
+      x-permission: form.read
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Form templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FormTemplate' }
+    post:
+      tags: [Forms]
+      operationId: createFormTemplate
+      x-permission: form.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateFormTemplate' }
+      responses:
+        '201':
+          description: Template and initial draft created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormTemplate' }
+  /v1/tenants/{tenantId}/form-templates/{templateId}/publish:
+    post:
+      tags: [Forms]
+      operationId: publishFormVersion
+      x-permission: form.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TemplateId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishFormVersion' }
+      responses:
+        '201':
+          description: Immutable version published
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormVersion' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/form-templates/{templateId}/archive:
+    post:
+      tags: [Forms]
+      operationId: archiveFormTemplate
+      x-permission: form.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TemplateId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonCommand' }
+      responses:
+        '200':
+          description: Template archived without deleting history
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormTemplate' }
+  /v1/tenants/{tenantId}/form-templates/{templateId}/versions/{versionId}/retire:
+    post:
+      tags: [Forms]
+      operationId: retireFormVersion
+      x-permission: form.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TemplateId'
+        - name: versionId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonCommand' }
+      responses:
+        '200':
+          description: Published version retired immutably
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormVersion' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/form-templates/{templateId}/submissions:
+    post:
+      tags: [Forms]
+      operationId: submitDynamicForm
+      x-permission: form.submit
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/TemplateId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [formVersionId, data]
+              properties:
+                formVersionId: { $ref: '#/components/schemas/Uuid' }
+                branchId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+                data: { type: object }
+      responses:
+        '201':
+          description: Validated immutable submission
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormSubmission' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+
+  /v1/tenants/{tenantId}/channels:
+    get:
+      tags: [Chat]
+      operationId: listChannels
+      x-permission: chat.read
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Channels current membership may access
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ChatChannel' }
+    post:
+      tags: [Chat]
+      operationId: createChannel
+      x-permission: chat.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateChatChannel' }
+      responses:
+        '201':
+          description: Channel created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatChannel' }
+  /v1/tenants/{tenantId}/channels/{channelId}/messages:
+    get:
+      tags: [Chat]
+      operationId: listMessages
+      x-permission: chat.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Cursor-paginated messages
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessagePage' }
+    post:
+      tags: [Chat]
+      operationId: sendMessage
+      x-permission: chat.write
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [clientMessageId, body]
+              properties:
+                clientMessageId: { type: string, minLength: 8, maxLength: 100 }
+                body: { type: string, minLength: 1, maxLength: 4000 }
+                replyToMessageId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+      responses:
+        '201':
+          description: Message persisted before realtime emit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatMessage' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
+
+  /v1/notification-endpoints:
+    post:
+      tags: [Notifications]
+      operationId: registerNotificationEndpoint
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterNotificationEndpoint' }
+      responses:
+        '200':
+          description: Created or reactivated endpoint
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationEndpoint' }
+  /v1/notification-endpoints/{endpointId}/revoke:
+    post:
+      tags: [Notifications]
+      operationId: revokeNotificationEndpoint
+      parameters:
+        - $ref: '#/components/parameters/EndpointId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Endpoint revoked }
+        '404': { $ref: '#/components/responses/NotFoundProblem' }
+
+  /v1/tenants/{tenantId}/media/upload-intents:
+    post:
+      tags: [Media]
+      operationId: createMediaUploadIntent
+      x-permission: media.create
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMediaIntent' }
+      responses:
+        '201':
+          description: Pending media and short-lived signed upload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaUploadIntent' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
+  /v1/tenants/{tenantId}/media/{mediaId}/complete:
+    post:
+      tags: [Media]
+      operationId: completeMediaUpload
+      x-permission: media.create
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/MediaId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Verified ready media
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaObject' }
+        '409': { $ref: '#/components/responses/ConflictProblem' }
+  /v1/tenants/{tenantId}/media/{mediaId}/download-url:
+    post:
+      tags: [Media]
+      operationId: createMediaDownloadUrl
+      x-permission: media.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/MediaId'
+      responses:
+        '200':
+          description: Short-lived signed download URL
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignedUrl' }
+        '404': { $ref: '#/components/responses/NotFoundProblem' }
+
+  /v1/tenants/{tenantId}/audit-events:
+    get:
+      tags: [Audit]
+      operationId: listAuditEvents
+      x-permission: audit.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/Cursor'
+        - name: targetType
+          in: query
+          schema: { type: string, maxLength: 80 }
+        - name: targetId
+          in: query
+          schema: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Redacted append-only audit events
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditPage' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+    TemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+    ChannelId:
+      name: channelId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+    EndpointId:
+      name: endpointId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+    MediaId:
+      name: mediaId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128 }
+  responses:
+    ValidationProblem:
+      description: Invalid input
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UnauthorizedProblem:
+      description: Authentication required or invalid
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ForbiddenProblem:
+      description: Actor lacks permission/scope
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFoundProblem:
+      description: Resource absent or intentionally hidden outside scope
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ConflictProblem:
+      description: State, concurrency, last-owner or idempotency fingerprint conflict
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    GoneProblem:
+      description: Invite expired, revoked or exhausted
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: Required dependency is not ready
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+    Timestamp:
+      type: string
+      format: date-time
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, timestamp]
+      properties:
+        status: { enum: [ok, degraded] }
+        timestamp: { $ref: '#/components/schemas/Timestamp' }
+        dependencies:
+          type: object
+          additionalProperties: { enum: [ok, degraded, disabled] }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, profileComplete, status]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        fullName: { type: [string, 'null'] }
+        profileComplete: { type: boolean }
+        status: { enum: [ACTIVE, SUSPENDED, DELETED] }
+    TokenPair:
+      type: object
+      additionalProperties: false
+      required: [accessToken, accessExpiresAt, refreshToken, refreshExpiresAt]
+      properties:
+        accessToken: { type: string }
+        accessExpiresAt: { $ref: '#/components/schemas/Timestamp' }
+        refreshToken: { type: string }
+        refreshExpiresAt: { $ref: '#/components/schemas/Timestamp' }
+    AuthResult:
+      allOf:
+        - $ref: '#/components/schemas/TokenPair'
+        - type: object
+          required: [user]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+    Tenant:
+      type: object
+      required: [id, name, slug, timezone, status]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        name: { type: string }
+        slug: { type: string }
+        timezone: { type: string }
+        status: { enum: [ACTIVE, SUSPENDED, CLOSED] }
+    UpdateTenantStatus:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status: { enum: [ACTIVE, SUSPENDED, CLOSED] }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    TenantMembershipSummary:
+      type: object
+      required: [tenant, membership]
+      properties:
+        tenant: { $ref: '#/components/schemas/Tenant' }
+        membership: { $ref: '#/components/schemas/Membership' }
+    Membership:
+      type: object
+      required: [id, tenantId, userId, displayName, status, version]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        tenantId: { $ref: '#/components/schemas/Uuid' }
+        userId: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string }
+        employeeCode: { type: [string, 'null'] }
+        status: { enum: [INVITED, ACTIVE, SUSPENDED, LEFT] }
+        version: { type: integer, minimum: 1 }
+    MembershipPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Membership' }
+        nextCursor: { type: [string, 'null'] }
+    OrganizationUnit:
+      type: object
+      required: [id, tenantId, code, name, status]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        tenantId: { $ref: '#/components/schemas/Uuid' }
+        code: { type: string }
+        name: { type: string }
+        status: { enum: [ACTIVE, INACTIVE] }
+    OrganizationUnitList:
+      type: array
+      items: { $ref: '#/components/schemas/OrganizationUnit' }
+    CreateOrganizationUnit:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9_-]{2,32}$' }
+        name: { type: string, minLength: 2, maxLength: 160 }
+    CreateBranch:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9_-]{2,32}$' }
+        name: { type: string, minLength: 2, maxLength: 160 }
+        timezoneOverride: { type: string, minLength: 3, maxLength: 64 }
+    UpdateOrganizationUnitStatus:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status: { enum: [ACTIVE, INACTIVE] }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    CreateInvitation:
+      type: object
+      additionalProperties: false
+      required: [type, roleId, expiresAt]
+      properties:
+        type: { enum: [DIRECT, GROUP_LINK] }
+        roleId: { $ref: '#/components/schemas/Uuid' }
+        branchId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        maxUses: { type: integer, minimum: 1, maximum: 1000, default: 1 }
+        expiresAt: { $ref: '#/components/schemas/Timestamp' }
+    Invitation:
+      type: object
+      required: [id, type, state, maxUses, useCount, expiresAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        type: { enum: [DIRECT, GROUP_LINK] }
+        state: { enum: [ACTIVE, EXPIRED, REVOKED, EXHAUSTED] }
+        tokenHint: { type: string }
+        maxUses: { type: integer }
+        useCount: { type: integer }
+        expiresAt: { $ref: '#/components/schemas/Timestamp' }
+    InvitationCreated:
+      allOf:
+        - $ref: '#/components/schemas/Invitation'
+        - type: object
+          required: [token, inviteUrl]
+          properties:
+            token: { type: string }
+            inviteUrl: { type: string, format: uri }
+    CreateAssignment:
+      type: object
+      additionalProperties: false
+      required: [branchId, effectiveFrom, reason]
+      properties:
+        branchId: { $ref: '#/components/schemas/Uuid' }
+        departmentId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        positionId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        effectiveFrom: { $ref: '#/components/schemas/Timestamp' }
+        effectiveTo: { anyOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}] }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    Assignment:
+      allOf:
+        - $ref: '#/components/schemas/CreateAssignment'
+        - type: object
+          required: [id, tenantId, membershipId]
+          properties:
+            id: { $ref: '#/components/schemas/Uuid' }
+            tenantId: { $ref: '#/components/schemas/Uuid' }
+            membershipId: { $ref: '#/components/schemas/Uuid' }
+    CreateRole:
+      type: object
+      additionalProperties: false
+      required: [code, name, permissionCodes, reason]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9_-]{2,40}$' }
+        name: { type: string, minLength: 2, maxLength: 120 }
+        permissionCodes:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 2, maxLength: 80 }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    Role:
+      type: object
+      required: [id, code, name, kind, permissionCodes]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        code: { type: string }
+        name: { type: string }
+        kind: { enum: [SYSTEM, CUSTOM] }
+        permissionCodes:
+          type: array
+          items: { type: string }
+    CreateRoleBinding:
+      type: object
+      additionalProperties: false
+      required: [roleId, scopeType, effectiveFrom, reason]
+      properties:
+        roleId: { $ref: '#/components/schemas/Uuid' }
+        scopeType: { enum: [TENANT, BRANCH] }
+        branchId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        effectiveFrom: { $ref: '#/components/schemas/Timestamp' }
+        effectiveTo: { anyOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}] }
+        reason: { type: string, maxLength: 500 }
+    RoleBinding:
+      allOf:
+        - $ref: '#/components/schemas/CreateRoleBinding'
+        - type: object
+          required: [id, membershipId]
+          properties:
+            id: { $ref: '#/components/schemas/Uuid' }
+            membershipId: { $ref: '#/components/schemas/Uuid' }
+    CreateFormTemplate:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9_-]{2,40}$' }
+        name: { type: string, minLength: 2, maxLength: 160 }
+        description: { type: string, maxLength: 1000 }
+    FormTemplate:
+      type: object
+      required: [id, code, name, status]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        code: { type: string }
+        name: { type: string }
+        status: { enum: [ACTIVE, ARCHIVED] }
+        currentPublishedVersionId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+    PublishFormVersion:
+      type: object
+      additionalProperties: false
+      required: [jsonSchema, effectiveFrom, reason]
+      properties:
+        jsonSchema: { type: object }
+        uiSchema: { type: [object, 'null'] }
+        effectiveFrom: { $ref: '#/components/schemas/Timestamp' }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    ReasonCommand:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    FormVersion:
+      type: object
+      required: [id, templateId, versionNumber, status, jsonSchema]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        templateId: { $ref: '#/components/schemas/Uuid' }
+        versionNumber: { type: integer, minimum: 1 }
+        status: { enum: [DRAFT, PUBLISHED, RETIRED] }
+        jsonSchema: { type: object }
+        effectiveFrom: { $ref: '#/components/schemas/Timestamp' }
+    FormSubmission:
+      type: object
+      required: [id, templateId, formVersionId, submittedAt, data]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        templateId: { $ref: '#/components/schemas/Uuid' }
+        formVersionId: { $ref: '#/components/schemas/Uuid' }
+        submittedAt: { $ref: '#/components/schemas/Timestamp' }
+        data: { type: object }
+    CreateChatChannel:
+      type: object
+      additionalProperties: false
+      required: [type, name]
+      properties:
+        type: { enum: [BRANCH, GROUP] }
+        name: { type: string, minLength: 2, maxLength: 120 }
+        branchId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        membershipIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Uuid' }
+    ChatChannel:
+      type: object
+      required: [id, tenantId, type, name, status]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        tenantId: { $ref: '#/components/schemas/Uuid' }
+        type: { enum: [TENANT_GENERAL, BRANCH, GROUP] }
+        name: { type: string }
+        status: { enum: [ACTIVE, ARCHIVED] }
+    ChatMessage:
+      type: object
+      required: [id, channelId, authorMembershipId, authorDisplayName, body, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        channelId: { $ref: '#/components/schemas/Uuid' }
+        authorMembershipId: { $ref: '#/components/schemas/Uuid' }
+        authorDisplayName: { type: string }
+        body: { type: string }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+    MessagePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ChatMessage' }
+        nextCursor: { type: [string, 'null'] }
+    RegisterNotificationEndpoint:
+      type: object
+      additionalProperties: false
+      required: [platform, provider, token]
+      properties:
+        platform: { enum: [IOS, ANDROID] }
+        provider: { enum: [FCM, APNS] }
+        token: { type: string, minLength: 20, maxLength: 4096 }
+    NotificationEndpoint:
+      type: object
+      required: [id, platform, provider, status]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        platform: { enum: [IOS, ANDROID] }
+        provider: { enum: [FCM, APNS] }
+        status: { enum: [ACTIVE, INVALID, REVOKED] }
+    CreateMediaIntent:
+      type: object
+      additionalProperties: false
+      required: [purpose, contentType, byteSize, checksumSha256]
+      properties:
+        purpose: { type: string, minLength: 2, maxLength: 50 }
+        branchId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        sourceType: { type: string, minLength: 2, maxLength: 80 }
+        sourceId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        contentType: { enum: [image/jpeg, image/png, image/webp, video/mp4, application/pdf] }
+        byteSize: { type: integer, minimum: 1, maximum: 524288000 }
+        checksumSha256: { type: string, pattern: '^[A-Fa-f0-9]{64}$' }
+    MediaUploadIntent:
+      type: object
+      required: [media, upload]
+      properties:
+        media: { $ref: '#/components/schemas/MediaObject' }
+        upload:
+          $ref: '#/components/schemas/SignedUrl'
+    MediaObject:
+      type: object
+      required: [id, tenantId, purpose, contentType, byteSize, checksumSha256, status]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        tenantId: { $ref: '#/components/schemas/Uuid' }
+        purpose: { type: string }
+        contentType: { type: string }
+        byteSize: { type: integer }
+        checksumSha256: { type: string }
+        status: { enum: [PENDING_UPLOAD, READY, REJECTED, DELETED] }
+    SignedUrl:
+      type: object
+      required: [url, expiresAt, requiredHeaders]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { $ref: '#/components/schemas/Timestamp' }
+        requiredHeaders:
+          type: object
+          additionalProperties: { type: string }
+    AuditEvent:
+      type: object
+      required: [id, tenantId, eventType, targetType, correlationId, occurredAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        tenantId: { $ref: '#/components/schemas/Uuid' }
+        actorMembershipId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        eventType: { type: string }
+        targetType: { type: string }
+        targetId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
+        correlationId: { type: string }
+        reason: { type: [string, 'null'] }
+        before: { type: [object, 'null'] }
+        after: { type: [object, 'null'] }
+        occurredAt: { $ref: '#/components/schemas/Timestamp' }
+    AuditPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditEvent' }
+        nextCursor: { type: [string, 'null'] }
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, correlationId]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        code: { type: string, pattern: '^[A-Z0-9_]+$' }
+        detail: { type: string }
+        correlationId: { type: string }
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            required: [path, code, message]
+            properties:
+              path: { type: string }
+              code: { type: string }
+              message: { type: string }
+security:
+  - bearerAuth: []

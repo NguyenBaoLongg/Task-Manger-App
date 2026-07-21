@@ -1,0 +1,4 @@
+interface:
+  display_name: "Timekeeping and Workflows"
+  short_description: "Build video attendance and approval workflows"
+  default_prompt: "Use $build-timekeeping-workflows to design video check-in, late penalties, leave balances, and dynamic approvals."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "OKR and KPI Engine"
+  short_description: "Build aligned OKR and measurable KPI workflows"
+  default_prompt: "Use $build-okr-kpi-engine to specify and implement the OKR, KPI, photo-debt, and fraud-detection module."

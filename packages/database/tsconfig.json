@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "composite": true, "rootDir": ".", "outDir": "dist" },
+  "include": [
+    "src/**/*.ts",
+    "prisma.config.ts",
+    "prisma/seed.ts",
+    "prisma/verify-seed.ts",
+    "prisma/verify-kpi-seed.ts",
+    "prisma/verify-timekeeping-seed.ts"
+  ],
+  "references": [{ "path": "../config" }, { "path": "../domain" }]
+}

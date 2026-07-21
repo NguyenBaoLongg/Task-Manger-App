@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mobile SaaS Frontend"
+  short_description: "Build the native mobile workspace experience"
+  default_prompt: "Use $build-mobile-frontend with $ui-ux-pro-max to implement the mobile OKR, workspace, dynamic forms, calendar, chat, and notifications UI."

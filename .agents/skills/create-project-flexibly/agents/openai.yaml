@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Projects Flexibly"
+  short_description: "Orchestrate specs, docs, design, and delivery"
+  default_prompt: "Use $create-project-flexibly to choose and run the right workflow for this project."

@@ -1,0 +1,1666 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum IdentityProvider {
+  GOOGLE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum ResourceStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  LEFT
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum RoleKind {
+  SYSTEM
+  CUSTOM
+}
+
+enum RoleStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ScopeType {
+  TENANT
+  BRANCH
+}
+
+enum InvitationType {
+  DIRECT
+  GROUP_LINK
+}
+
+enum FormTemplateStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum FormVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum FormSubmissionStatus {
+  SUBMITTED
+  VOIDED
+}
+
+enum ChatChannelType {
+  TENANT_GENERAL
+  BRANCH
+  GROUP
+}
+
+enum ChatChannelStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ChatChannelRole {
+  MEMBER
+  MODERATOR
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+enum MediaStatus {
+  PENDING_UPLOAD
+  READY
+  REJECTED
+  DELETED
+}
+
+enum MediaPurpose {
+  CHECKIN
+  BOOKING
+  FORM_EVIDENCE
+  CHAT_ATTACHMENT
+  PROFILE
+  OTHER
+}
+
+enum EndpointPlatform {
+  IOS
+  ANDROID
+}
+
+enum PushProvider {
+  FCM
+  APNS
+}
+
+enum EndpointStatus {
+  ACTIVE
+  INVALID
+  REVOKED
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  FAILED_RETRYABLE
+}
+
+enum KpiValueType {
+  MONEY
+  COUNT
+  PERCENTAGE
+}
+
+enum KpiDirection {
+  AT_LEAST
+  AT_MOST
+}
+
+enum KpiSourceType {
+  FORM_FIELD
+  DOMAIN_ADAPTER
+}
+
+enum KpiScopeType {
+  TENANT
+  BRANCH
+  DEPARTMENT
+  GROUP
+  MEMBERSHIP
+}
+
+enum DailyKpiPolicyScopeType {
+  TENANT
+  BRANCH
+}
+
+enum KpiReportStatus {
+  OPEN
+  SUBMITTED
+  LATE
+  CLOSED
+}
+
+enum KpiEvaluationStatus {
+  PASSED
+  FAILED
+  EXEMPT
+}
+
+enum KpiPenaltyKind {
+  DAILY_KPI
+  PHOTO_EVIDENCE
+}
+
+enum KpiPenaltyStatus {
+  ASSESSED
+  FULLY_REVERSED
+}
+
+enum EvidenceDebtStatus {
+  WAITING_PHOTOS
+  SATISFIED
+  OVERDUE
+  WAIVED
+}
+
+enum ActionItemState {
+  OPEN
+  OVERDUE
+  COMPLETED
+  DISMISSED
+}
+
+enum ActionItemType {
+  KPI_REPORT
+  KPI_SHORTFALL
+  PHOTO_DEBT
+  DATA_QUALITY
+}
+
+enum KpiJobRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  DEAD_LETTER
+}
+
+enum ShiftStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum ScheduleState {
+  SCHEDULED
+  OFF
+  LEAVE_APPROVED
+  ADJUSTED
+  CANCELLED
+}
+
+enum ScheduleChangeKind {
+  SELF_EDIT
+  CHANGE_REQUEST
+  MANAGER_ADJUSTMENT
+  OFF_CALENDAR
+  LEAVE_APPROVAL
+}
+
+enum AttendanceState {
+  PENDING_VIDEO
+  VIDEO_UPLOADED
+  CONFIRMED
+  MISSING_CHECK_IN
+  NON_WORKED
+  EXEMPT_OFF
+}
+
+enum VideoProcessingState {
+  REQUESTED
+  UPLOADED
+  VERIFYING
+  CONVERTING
+  READY
+  FAILED_RETRYABLE
+  FAILED_FINAL
+}
+
+enum VideoReviewStatus {
+  PENDING
+  PASSED
+  FAILED
+  WAIVED
+}
+
+enum DayWorkClassification {
+  WORKED_ON_TIME
+  WORKED_LATE
+  NON_WORKED_NO_CHECKIN
+  OFF_OR_APPROVED_LEAVE
+}
+
+enum ViolationKind {
+  MISSING_CHECK_IN
+  VIDEO_STANDARD_FAILED
+  LATE_BASE
+  LATE_NO_NOTICE
+  SUDDEN_LEAVE_NO_NOTICE
+  SUDDEN_LEAVE_OVER_LIMIT
+  LEAVE_RULE_VIOLATION
+}
+
+enum PenaltySettlementStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+  WAIVED
+  REFUNDED
+}
+
+enum RequestType {
+  SHIFT_CHANGE
+  LATE_NOTICE
+  LEAVE_SCHEDULE
+  SUDDEN_LEAVE
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum ApprovalStepMode {
+  SEQUENTIAL
+  PARALLEL
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  SKIPPED
+}
+
+enum ApprovalDecision {
+  APPROVE
+  REJECT
+  REQUEST_CHANGES
+  CANCEL
+}
+
+enum LeaveDurationKind {
+  FULL_DAY
+  MORNING_HALF
+  DATE_RANGE
+}
+
+enum OffCalendarScope {
+  TENANT
+  BRANCH
+}
+
+enum LeaveConflictResult {
+  CLEAR
+  CONFLICT
+  WARNING
+}
+
+enum AttendanceJobRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+model User {
+  id                  String     @id @default(uuid()) @db.Uuid
+  fullName            String?    @map("full_name") @db.VarChar(120)
+  fullNameConfirmedAt DateTime?  @map("full_name_confirmed_at") @db.Timestamptz(3)
+  status              UserStatus @default(ACTIVE)
+  locale              String     @default("vi-VN") @db.VarChar(16)
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("users")
+}
+
+model ExternalIdentity {
+  id              String           @id @default(uuid()) @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  provider        IdentityProvider
+  providerSubject String           @map("provider_subject") @db.VarChar(255)
+  email           String?          @db.VarChar(320)
+  emailVerified   Boolean          @default(false) @map("email_verified")
+  lastLoginAt     DateTime         @default(now()) @map("last_login_at") @db.Timestamptz(3)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@map("external_identities")
+}
+
+model AuthSession {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  refreshTokenHash    String    @unique @map("refresh_token_hash") @db.VarChar(128)
+  tokenFamilyId       String    @map("token_family_id") @db.Uuid
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokeReason        String?   @map("revoke_reason") @db.VarChar(160)
+  replacedBySessionId String?   @map("replaced_by_session_id") @db.Uuid
+  deviceLabel         String?   @map("device_label") @db.VarChar(120)
+  userAgentHash       String?   @map("user_agent_hash") @db.VarChar(128)
+  ipPrefix            String?   @map("ip_prefix") @db.VarChar(64)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt          DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(3)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([tokenFamilyId])
+  @@map("auth_sessions")
+}
+
+model NotificationEndpoint {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  platform         EndpointPlatform
+  provider         PushProvider
+  tokenCiphertext  String           @map("token_ciphertext") @db.Text
+  tokenFingerprint String           @map("token_fingerprint") @db.VarChar(128)
+  status           EndpointStatus   @default(ACTIVE)
+  lastSeenAt       DateTime?        @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt        DateTime?        @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([userId, tokenFingerprint])
+  @@map("notification_endpoints")
+}
+
+model Permission {
+  id            String   @id @default(uuid()) @db.Uuid
+  code          String   @unique @db.VarChar(80)
+  description   String   @db.VarChar(255)
+  allowedScopes Json     @map("allowed_scopes") @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("permissions")
+}
+
+model SecurityEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String?  @map("user_id") @db.Uuid
+  sessionId        String?  @map("session_id") @db.Uuid
+  eventType        String   @map("event_type") @db.VarChar(100)
+  correlationId    String   @map("correlation_id") @db.VarChar(100)
+  ipPrefix         String?  @map("ip_prefix") @db.VarChar(64)
+  userAgentHash    String?  @map("user_agent_hash") @db.VarChar(128)
+  metadataRedacted Json?    @map("metadata_redacted") @db.JsonB
+  occurredAt       DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  @@index([userId, occurredAt])
+  @@map("security_events")
+}
+
+model AccountIdempotencyRecord {
+  id                     String            @id @default(uuid()) @db.Uuid
+  userId                 String            @map("user_id") @db.Uuid
+  operation              String            @db.VarChar(100)
+  key                    String            @db.VarChar(160)
+  requestHash            String            @map("request_hash") @db.VarChar(128)
+  status                 IdempotencyStatus @default(PROCESSING)
+  responseStatus         Int?              @map("response_status")
+  responseBodyRedacted   Json?             @map("response_body_redacted") @db.JsonB
+  responseBodyCiphertext String?           @map("response_body_ciphertext") @db.Text
+  resourceId             String?           @map("resource_id") @db.Uuid
+  lockedUntil            DateTime          @map("locked_until") @db.Timestamptz(3)
+  expiresAt              DateTime          @map("expires_at") @db.Timestamptz(3)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([userId, operation, key])
+  @@map("account_idempotency_records")
+}
+
+model Tenant {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String       @db.VarChar(160)
+  slug            String       @unique @db.VarChar(100)
+  timezone        String       @default("Asia/Ho_Chi_Minh") @db.VarChar(64)
+  status          TenantStatus @default(ACTIVE)
+  settings        Json         @default("{}") @db.JsonB
+  createdByUserId String       @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("tenants")
+}
+
+model Branch {
+  tenantId              String         @map("tenant_id") @db.Uuid
+  id                    String         @default(uuid()) @db.Uuid
+  code                  String         @db.VarChar(50)
+  name                  String         @db.VarChar(160)
+  timezoneOverride      String?        @map("timezone_override") @db.VarChar(64)
+  status                ResourceStatus @default(ACTIVE)
+  createdByMembershipId String?        @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@map("branches")
+}
+
+model Department {
+  tenantId  String         @map("tenant_id") @db.Uuid
+  id        String         @default(uuid()) @db.Uuid
+  code      String         @db.VarChar(50)
+  name      String         @db.VarChar(160)
+  status    ResourceStatus @default(ACTIVE)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("departments")
+}
+
+model Position {
+  tenantId  String         @map("tenant_id") @db.Uuid
+  id        String         @default(uuid()) @db.Uuid
+  code      String         @db.VarChar(50)
+  name      String         @db.VarChar(160)
+  status    ResourceStatus @default(ACTIVE)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("positions")
+}
+
+model TenantMembership {
+  tenantId              String           @map("tenant_id") @db.Uuid
+  id                    String           @default(uuid()) @db.Uuid
+  userId                String           @map("user_id") @db.Uuid
+  membershipDisplayName String           @map("membership_display_name") @db.VarChar(120)
+  employeeCode          String?          @map("employee_code") @db.VarChar(50)
+  status                MembershipStatus @default(INVITED)
+  joinedAt              DateTime?        @map("joined_at") @db.Timestamptz(3)
+  suspendedAt           DateTime?        @map("suspended_at") @db.Timestamptz(3)
+  leftAt                DateTime?        @map("left_at") @db.Timestamptz(3)
+  version               Int              @default(1)
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, userId])
+  @@unique([tenantId, employeeCode])
+  @@index([tenantId, status])
+  @@map("tenant_memberships")
+}
+
+model Assignment {
+  tenantId              String           @map("tenant_id") @db.Uuid
+  id                    String           @default(uuid()) @db.Uuid
+  membershipId          String           @map("membership_id") @db.Uuid
+  branchId              String           @map("branch_id") @db.Uuid
+  departmentId          String?          @map("department_id") @db.Uuid
+  positionId            String?          @map("position_id") @db.Uuid
+  effectiveFrom         DateTime         @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?        @map("effective_to") @db.Timestamptz(3)
+  status                AssignmentStatus @default(ACTIVE)
+  createdByMembershipId String           @map("created_by_membership_id") @db.Uuid
+  reason                String?          @db.VarChar(500)
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, membershipId, effectiveFrom, effectiveTo])
+  @@index([tenantId, branchId, effectiveFrom, effectiveTo])
+  @@map("assignments")
+}
+
+model Role {
+  tenantId  String     @map("tenant_id") @db.Uuid
+  id        String     @default(uuid()) @db.Uuid
+  code      String     @db.VarChar(80)
+  name      String     @db.VarChar(120)
+  kind      RoleKind
+  status    RoleStatus @default(ACTIVE)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("roles")
+}
+
+model RolePermission {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model MembershipRoleBinding {
+  tenantId              String    @map("tenant_id") @db.Uuid
+  id                    String    @default(uuid()) @db.Uuid
+  membershipId          String    @map("membership_id") @db.Uuid
+  roleId                String    @map("role_id") @db.Uuid
+  scopeType             ScopeType @map("scope_type")
+  branchId              String?   @map("branch_id") @db.Uuid
+  effectiveFrom         DateTime  @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime? @map("effective_to") @db.Timestamptz(3)
+  grantedByMembershipId String    @map("granted_by_membership_id") @db.Uuid
+  reason                String?   @db.VarChar(500)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, roleId, scopeType, branchId, effectiveFrom])
+  @@index([tenantId, membershipId, effectiveFrom, effectiveTo])
+  @@map("membership_role_bindings")
+}
+
+model Invitation {
+  tenantId              String         @map("tenant_id") @db.Uuid
+  id                    String         @default(uuid()) @db.Uuid
+  tokenHash             String         @unique @map("token_hash") @db.VarChar(128)
+  tokenHint             String         @map("token_hint") @db.VarChar(16)
+  invitationType        InvitationType @map("invitation_type")
+  roleId                String         @map("role_id") @db.Uuid
+  branchId              String?        @map("branch_id") @db.Uuid
+  maxUses               Int            @default(1) @map("max_uses")
+  useCount              Int            @default(0) @map("use_count")
+  expiresAt             DateTime       @map("expires_at") @db.Timestamptz(3)
+  revokedAt             DateTime?      @map("revoked_at") @db.Timestamptz(3)
+  createdByMembershipId String         @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, expiresAt, revokedAt])
+  @@map("invitations")
+}
+
+model InvitationAcceptance {
+  tenantId      String   @map("tenant_id") @db.Uuid
+  id            String   @default(uuid()) @db.Uuid
+  invitationId  String   @map("invitation_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  membershipId  String   @map("membership_id") @db.Uuid
+  acceptedAt    DateTime @default(now()) @map("accepted_at") @db.Timestamptz(3)
+  correlationId String   @map("correlation_id") @db.VarChar(100)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, invitationId, userId])
+  @@map("invitation_acceptances")
+}
+
+model FormTemplate {
+  tenantId                  String             @map("tenant_id") @db.Uuid
+  id                        String             @default(uuid()) @db.Uuid
+  code                      String             @db.VarChar(80)
+  name                      String             @db.VarChar(160)
+  description               String?            @db.VarChar(1000)
+  status                    FormTemplateStatus @default(ACTIVE)
+  currentPublishedVersionId String?            @map("current_published_version_id") @db.Uuid
+  createdByMembershipId     String             @map("created_by_membership_id") @db.Uuid
+  createdAt                 DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("form_templates")
+}
+
+model FormVersion {
+  tenantId                String            @map("tenant_id") @db.Uuid
+  id                      String            @default(uuid()) @db.Uuid
+  formTemplateId          String            @map("form_template_id") @db.Uuid
+  versionNumber           Int               @map("version_number")
+  status                  FormVersionStatus @default(DRAFT)
+  jsonSchema              Json              @map("json_schema") @db.JsonB
+  uiSchema                Json?             @map("ui_schema") @db.JsonB
+  effectiveFrom           DateTime?         @map("effective_from") @db.Timestamptz(3)
+  publishedAt             DateTime?         @map("published_at") @db.Timestamptz(3)
+  publishedByMembershipId String?           @map("published_by_membership_id") @db.Uuid
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, formTemplateId, versionNumber])
+  @@map("form_versions")
+}
+
+model FormSubmission {
+  tenantId                String               @map("tenant_id") @db.Uuid
+  id                      String               @default(uuid()) @db.Uuid
+  formTemplateId          String               @map("form_template_id") @db.Uuid
+  formVersionId           String               @map("form_version_id") @db.Uuid
+  submittedByMembershipId String               @map("submitted_by_membership_id") @db.Uuid
+  branchId                String?              @map("branch_id") @db.Uuid
+  data                    Json                 @db.JsonB
+  status                  FormSubmissionStatus @default(SUBMITTED)
+  submittedAt             DateTime             @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  voidedAt                DateTime?            @map("voided_at") @db.Timestamptz(3)
+  voidReason              String?              @map("void_reason") @db.VarChar(500)
+  idempotencyKey          String               @map("idempotency_key") @db.VarChar(160)
+  supersedesSubmissionId  String?              @map("supersedes_submission_id") @db.Uuid
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, submittedByMembershipId, idempotencyKey])
+  @@index([tenantId, formTemplateId, submittedAt])
+  @@map("form_submissions")
+}
+
+model ChatChannel {
+  tenantId              String            @map("tenant_id") @db.Uuid
+  id                    String            @default(uuid()) @db.Uuid
+  type                  ChatChannelType
+  name                  String            @db.VarChar(160)
+  branchId              String?           @map("branch_id") @db.Uuid
+  status                ChatChannelStatus @default(ACTIVE)
+  createdByMembershipId String            @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, type, status])
+  @@map("chat_channels")
+}
+
+model ChatChannelMembership {
+  tenantId          String          @map("tenant_id") @db.Uuid
+  channelId         String          @map("channel_id") @db.Uuid
+  membershipId      String          @map("membership_id") @db.Uuid
+  role              ChatChannelRole @default(MEMBER)
+  joinedAt          DateTime        @default(now()) @map("joined_at") @db.Timestamptz(3)
+  leftAt            DateTime?       @map("left_at") @db.Timestamptz(3)
+  lastReadMessageId String?         @map("last_read_message_id") @db.Uuid
+
+  @@id([tenantId, channelId, membershipId])
+  @@index([tenantId, membershipId, leftAt])
+  @@map("chat_channel_memberships")
+}
+
+model ChatMessage {
+  tenantId                  String      @map("tenant_id") @db.Uuid
+  id                        String      @default(uuid()) @db.Uuid
+  channelId                 String      @map("channel_id") @db.Uuid
+  authorMembershipId        String      @map("author_membership_id") @db.Uuid
+  authorDisplayNameSnapshot String      @map("author_display_name_snapshot") @db.VarChar(120)
+  clientMessageId           String      @map("client_message_id") @db.VarChar(100)
+  body                      String      @db.Text
+  messageType               MessageType @default(TEXT) @map("message_type")
+  replyToMessageId          String?     @map("reply_to_message_id") @db.Uuid
+  createdAt                 DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  editedAt                  DateTime?   @map("edited_at") @db.Timestamptz(3)
+  deletedAt                 DateTime?   @map("deleted_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, authorMembershipId, clientMessageId])
+  @@index([tenantId, channelId, createdAt, id])
+  @@map("chat_messages")
+}
+
+model MediaObject {
+  tenantId          String      @map("tenant_id") @db.Uuid
+  id                String      @default(uuid()) @db.Uuid
+  ownerMembershipId String      @map("owner_membership_id") @db.Uuid
+  branchId          String?     @map("branch_id") @db.Uuid
+  sourceType        String      @map("source_type") @db.VarChar(80)
+  sourceId          String?     @map("source_id") @db.Uuid
+  purpose           String      @db.VarChar(50)
+  storageProvider   String      @map("storage_provider") @db.VarChar(32)
+  bucket            String      @db.VarChar(255)
+  objectKey         String      @map("object_key") @db.VarChar(1024)
+  contentType       String      @map("content_type") @db.VarChar(160)
+  byteSize          BigInt      @map("byte_size")
+  checksumSha256    String      @map("checksum_sha256") @db.VarChar(64)
+  status            MediaStatus @default(PENDING_UPLOAD)
+  uploadExpiresAt   DateTime    @map("upload_expires_at") @db.Timestamptz(3)
+  readyAt           DateTime?   @map("ready_at") @db.Timestamptz(3)
+  deletedAt         DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  retentionUntil    DateTime?   @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt       DateTime?   @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([storageProvider, bucket, objectKey])
+  @@index([tenantId, sourceType, sourceId])
+  @@index([tenantId, status, uploadExpiresAt])
+  @@map("media_objects")
+}
+
+model AuditEvent {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  id                String   @default(uuid()) @db.Uuid
+  actorMembershipId String?  @map("actor_membership_id") @db.Uuid
+  actorUserId       String?  @map("actor_user_id") @db.Uuid
+  correlationId     String   @map("correlation_id") @db.VarChar(100)
+  eventType         String   @map("event_type") @db.VarChar(100)
+  targetType        String   @map("target_type") @db.VarChar(100)
+  targetId          String?  @map("target_id") @db.Uuid
+  reason            String   @db.VarChar(500)
+  beforeRedacted    Json?    @map("before_redacted") @db.JsonB
+  afterRedacted     Json?    @map("after_redacted") @db.JsonB
+  metadataRedacted  Json?    @map("metadata_redacted") @db.JsonB
+  occurredAt        DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, occurredAt, id])
+  @@index([tenantId, targetType, targetId, occurredAt])
+  @@index([tenantId, actorMembershipId, occurredAt])
+  @@map("audit_events")
+}
+
+model TenantIdempotencyRecord {
+  tenantId               String            @map("tenant_id") @db.Uuid
+  id                     String            @default(uuid()) @db.Uuid
+  membershipId           String            @map("membership_id") @db.Uuid
+  operation              String            @db.VarChar(100)
+  key                    String            @db.VarChar(160)
+  requestHash            String            @map("request_hash") @db.VarChar(128)
+  status                 IdempotencyStatus @default(PROCESSING)
+  responseStatus         Int?              @map("response_status")
+  responseBodyRedacted   Json?             @map("response_body_redacted") @db.JsonB
+  responseBodyCiphertext String?           @map("response_body_ciphertext") @db.Text
+  resourceId             String?           @map("resource_id") @db.Uuid
+  lockedUntil            DateTime          @map("locked_until") @db.Timestamptz(3)
+  expiresAt              DateTime          @map("expires_at") @db.Timestamptz(3)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, operation, key])
+  @@index([tenantId, expiresAt])
+  @@map("tenant_idempotency_records")
+}
+
+model KpiDefinition {
+  tenantId              String         @map("tenant_id") @db.Uuid
+  id                    String         @default(uuid()) @db.Uuid
+  code                  String         @db.VarChar(80)
+  name                  String         @db.VarChar(160)
+  description           String?        @db.VarChar(1000)
+  valueType             KpiValueType   @map("value_type")
+  unit                  String         @db.VarChar(16)
+  direction             KpiDirection
+  sourceType            KpiSourceType  @map("source_type")
+  status                ResourceStatus @default(ACTIVE)
+  createdByMembershipId String         @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, status, id])
+  @@map("kpi_definitions")
+}
+
+model KpiTargetVersion {
+  tenantId              String       @map("tenant_id") @db.Uuid
+  id                    String       @default(uuid()) @db.Uuid
+  kpiDefinitionId       String       @map("kpi_definition_id") @db.Uuid
+  scopeType             KpiScopeType @map("scope_type")
+  scopeId               String?      @map("scope_id") @db.Uuid
+  targetMoneyMinor      BigInt?      @map("target_money_minor")
+  targetCount           BigInt?      @map("target_count")
+  targetPercentage      Decimal?     @map("target_percentage") @db.Decimal(18, 4)
+  required              Boolean      @default(true)
+  effectiveFrom         DateTime     @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?    @map("effective_to") @db.Timestamptz(3)
+  versionNumber         Int          @map("version_number")
+  createdByMembershipId String       @map("created_by_membership_id") @db.Uuid
+  reason                String       @db.VarChar(500)
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, kpiDefinitionId, scopeType, scopeId, versionNumber])
+  @@index([tenantId, kpiDefinitionId, scopeType, scopeId, effectiveFrom, effectiveTo])
+  @@map("kpi_target_versions")
+}
+
+model KpiSourceMappingVersion {
+  tenantId              String        @map("tenant_id") @db.Uuid
+  id                    String        @default(uuid()) @db.Uuid
+  kpiDefinitionId       String        @map("kpi_definition_id") @db.Uuid
+  sourceType            KpiSourceType @map("source_type")
+  formTemplateId        String?       @map("form_template_id") @db.Uuid
+  formVersionId         String?       @map("form_version_id") @db.Uuid
+  jsonPointer           String?       @map("json_pointer") @db.VarChar(500)
+  adapterCode           String?       @map("adapter_code") @db.VarChar(80)
+  aggregation           String        @db.VarChar(32)
+  normalizationJson     Json          @default("{}") @map("normalization_json") @db.JsonB
+  requiresEvidence      Boolean       @default(false) @map("requires_evidence")
+  effectiveFrom         DateTime      @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?     @map("effective_to") @db.Timestamptz(3)
+  versionNumber         Int           @map("version_number")
+  createdByMembershipId String        @map("created_by_membership_id") @db.Uuid
+  reason                String        @db.VarChar(500)
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, kpiDefinitionId, sourceType, versionNumber])
+  @@index([tenantId, kpiDefinitionId, effectiveFrom, effectiveTo])
+  @@map("kpi_source_mapping_versions")
+}
+
+model DailyKpiPolicyVersion {
+  tenantId              String                  @map("tenant_id") @db.Uuid
+  id                    String                  @default(uuid()) @db.Uuid
+  scopeType             DailyKpiPolicyScopeType @map("scope_type")
+  branchId              String?                 @map("branch_id") @db.Uuid
+  versionNumber         Int                     @map("version_number")
+  effectiveFromDate     DateTime                @map("effective_from_date") @db.Date
+  effectiveToDate       DateTime?               @map("effective_to_date") @db.Date
+  timezone              String                  @db.VarChar(64)
+  reportOpenLocal       String                  @map("report_open_local") @db.VarChar(8)
+  reportCloseLocal      String                  @map("report_close_local") @db.VarChar(8)
+  evaluationLocal       String                  @map("evaluation_local") @db.VarChar(8)
+  failurePenaltyMinor   BigInt                  @default(100000) @map("failure_penalty_minor")
+  currency              String                  @default("VND") @db.VarChar(3)
+  kpiScopeJson          Json                    @default("{}") @map("kpi_scope_json") @db.JsonB
+  membershipScopeJson   Json                    @default("{}") @map("membership_scope_json") @db.JsonB
+  exemptionRuleJson     Json                    @default("{}") @map("exemption_rule_json") @db.JsonB
+  evidenceEnabled       Boolean                 @default(false) @map("evidence_enabled")
+  evidenceGraceSeconds  Int                     @default(300) @map("evidence_grace_seconds")
+  photoPenaltyMinor     BigInt?                 @map("photo_penalty_minor")
+  createdByMembershipId String                  @map("created_by_membership_id") @db.Uuid
+  reason                String                  @db.VarChar(500)
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, scopeType, branchId, versionNumber])
+  @@index([tenantId, scopeType, branchId, effectiveFromDate, effectiveToDate])
+  @@map("daily_kpi_policy_versions")
+}
+
+model DailyKpiReport {
+  tenantId          String          @map("tenant_id") @db.Uuid
+  id                String          @default(uuid()) @db.Uuid
+  membershipId      String          @map("membership_id") @db.Uuid
+  branchId          String          @map("branch_id") @db.Uuid
+  businessDate      DateTime        @map("business_date") @db.Date
+  policyVersionId   String          @map("policy_version_id") @db.Uuid
+  openedAt          DateTime        @map("opened_at") @db.Timestamptz(3)
+  closedAt          DateTime        @map("closed_at") @db.Timestamptz(3)
+  evaluationAt      DateTime        @map("evaluation_at") @db.Timestamptz(3)
+  status            KpiReportStatus @default(OPEN)
+  currentRevisionId String?         @map("current_revision_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, businessDate])
+  @@index([tenantId, branchId, businessDate, status])
+  @@index([tenantId, evaluationAt, status])
+  @@map("daily_kpi_reports")
+}
+
+model DailyKpiReportRevision {
+  tenantId              String   @map("tenant_id") @db.Uuid
+  id                    String   @default(uuid()) @db.Uuid
+  reportId              String   @map("report_id") @db.Uuid
+  revisionNumber        Int      @map("revision_number")
+  formSubmissionId      String   @map("form_submission_id") @db.Uuid
+  formVersionId         String   @map("form_version_id") @db.Uuid
+  submittedAt           DateTime @map("submitted_at") @db.Timestamptz(3)
+  acceptedInWindow      Boolean  @map("accepted_in_window")
+  sourceDigest          String   @map("source_digest") @db.VarChar(64)
+  createdByMembershipId String   @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, reportId, revisionNumber])
+  @@unique([tenantId, reportId, formSubmissionId])
+  @@index([tenantId, reportId, submittedAt, id])
+  @@map("daily_kpi_report_revisions")
+}
+
+model KpiCalculationEvent {
+  tenantId           String    @map("tenant_id") @db.Uuid
+  id                 String    @default(uuid()) @db.Uuid
+  reportId           String    @map("report_id") @db.Uuid
+  reportRevisionId   String?   @map("report_revision_id") @db.Uuid
+  kpiDefinitionId    String    @map("kpi_definition_id") @db.Uuid
+  targetVersionId    String    @map("target_version_id") @db.Uuid
+  mappingVersionId   String    @map("mapping_version_id") @db.Uuid
+  targetValue        String    @map("target_value") @db.VarChar(80)
+  actualValue        String?   @map("actual_value") @db.VarChar(80)
+  remainingValue     String    @map("remaining_value") @db.VarChar(80)
+  unit               String    @db.VarChar(16)
+  passed             Boolean
+  sourceType         String    @map("source_type") @db.VarChar(32)
+  sourceId           String?   @map("source_id") @db.Uuid
+  sourceObservedAt   DateTime? @map("source_observed_at") @db.Timestamptz(3)
+  calculationVersion Int       @default(1) @map("calculation_version")
+  inputDigest        String    @map("input_digest") @db.VarChar(64)
+  calculatedAt       DateTime  @default(now()) @map("calculated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, reportId, kpiDefinitionId, inputDigest])
+  @@index([tenantId, reportId, kpiDefinitionId, calculatedAt, id])
+  @@map("kpi_calculation_events")
+}
+
+model DailyKpiEvaluation {
+  tenantId          String              @map("tenant_id") @db.Uuid
+  id                String              @default(uuid()) @db.Uuid
+  reportId          String              @map("report_id") @db.Uuid
+  membershipId      String              @map("membership_id") @db.Uuid
+  branchId          String              @map("branch_id") @db.Uuid
+  businessDate      DateTime            @map("business_date") @db.Date
+  policyVersionId   String              @map("policy_version_id") @db.Uuid
+  reportRevisionId  String?             @map("report_revision_id") @db.Uuid
+  status            KpiEvaluationStatus
+  failedDetailsJson Json                @default("[]") @map("failed_details_json") @db.JsonB
+  exemptionSource   String?             @map("exemption_source") @db.VarChar(160)
+  evaluatedAt       DateTime            @default(now()) @map("evaluated_at") @db.Timestamptz(3)
+  jobRunId          String              @map("job_run_id") @db.Uuid
+  algorithmVersion  Int                 @default(1) @map("algorithm_version")
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, businessDate])
+  @@index([tenantId, branchId, businessDate, status, id])
+  @@map("daily_kpi_evaluations")
+}
+
+model PenaltyOutcome {
+  tenantId          String           @map("tenant_id") @db.Uuid
+  id                String           @default(uuid()) @db.Uuid
+  evaluationId      String?          @map("evaluation_id") @db.Uuid
+  membershipId      String           @map("membership_id") @db.Uuid
+  branchId          String           @map("branch_id") @db.Uuid
+  businessDate      DateTime         @map("business_date") @db.Date
+  policyVersionId   String           @map("policy_version_id") @db.Uuid
+  kind              KpiPenaltyKind
+  sourceKey         String           @default("") @map("source_key") @db.VarChar(160)
+  amountMinor       BigInt           @map("amount_minor")
+  currency          String           @default("VND") @db.VarChar(3)
+  failedDetailsJson Json             @default("[]") @map("failed_details_json") @db.JsonB
+  status            KpiPenaltyStatus @default(ASSESSED)
+  assessedAt        DateTime         @default(now()) @map("assessed_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, businessDate, kind, sourceKey])
+  @@index([tenantId, branchId, businessDate, kind])
+  @@map("penalty_outcomes")
+}
+
+model PenaltyAdjustment {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  id                String   @default(uuid()) @db.Uuid
+  penaltyOutcomeId  String   @map("penalty_outcome_id") @db.Uuid
+  deltaMinor        BigInt   @map("delta_minor")
+  reason            String   @db.VarChar(500)
+  actorMembershipId String   @map("actor_membership_id") @db.Uuid
+  correlationId     String   @map("correlation_id") @db.VarChar(100)
+  idempotencyKey    String   @map("idempotency_key") @db.VarChar(160)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, actorMembershipId, idempotencyKey])
+  @@index([tenantId, penaltyOutcomeId, createdAt, id])
+  @@map("penalty_adjustments")
+}
+
+model EvidenceDebt {
+  tenantId         String             @map("tenant_id") @db.Uuid
+  id               String             @default(uuid()) @db.Uuid
+  reportId         String             @map("report_id") @db.Uuid
+  policyVersionId  String             @map("policy_version_id") @db.Uuid
+  requiredCount    Int                @map("required_count")
+  receivedCount    Int                @default(0) @map("received_count")
+  state            EvidenceDebtStatus @default(WAITING_PHOTOS)
+  deadlineAt       DateTime           @map("deadline_at") @db.Timestamptz(3)
+  remindedAt       DateTime?          @map("reminded_at") @db.Timestamptz(3)
+  finalizedAt      DateTime?          @map("finalized_at") @db.Timestamptz(3)
+  penaltyOutcomeId String?            @map("penalty_outcome_id") @db.Uuid
+  stateVersion     Int                @default(1) @map("state_version")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, reportId])
+  @@index([tenantId, state, deadlineAt, id])
+  @@map("evidence_debts")
+}
+
+model ActionItem {
+  tenantId          String          @map("tenant_id") @db.Uuid
+  id                String          @default(uuid()) @db.Uuid
+  ownerMembershipId String          @map("owner_membership_id") @db.Uuid
+  branchId          String?         @map("branch_id") @db.Uuid
+  departmentId      String?         @map("department_id") @db.Uuid
+  itemType          ActionItemType  @map("item_type")
+  sourceType        String          @map("source_type") @db.VarChar(50)
+  sourceId          String          @map("source_id") @db.Uuid
+  businessDate      DateTime        @map("business_date") @db.Date
+  state             ActionItemState @default(OPEN)
+  priority          Int             @default(50)
+  title             String          @db.VarChar(255)
+  targetValue       String?         @map("target_value") @db.VarChar(80)
+  actualValue       String?         @map("actual_value") @db.VarChar(80)
+  remainingValue    String?         @map("remaining_value") @db.VarChar(80)
+  unit              String?         @db.VarChar(16)
+  deadlineAt        DateTime        @map("deadline_at") @db.Timestamptz(3)
+  sourceFreshnessAt DateTime        @map("source_freshness_at") @db.Timestamptz(3)
+  deepLink          String          @map("deep_link") @db.VarChar(1000)
+  stateVersion      Int             @default(1) @map("state_version")
+  completedAt       DateTime?       @map("completed_at") @db.Timestamptz(3)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, ownerMembershipId, itemType, sourceType, sourceId, businessDate])
+  @@index([tenantId, ownerMembershipId, state, updatedAt, id])
+  @@index([tenantId, branchId, departmentId, state, businessDate, updatedAt, id])
+  @@map("action_items")
+}
+
+model ActionItemTransition {
+  tenantId          String           @map("tenant_id") @db.Uuid
+  id                String           @default(uuid()) @db.Uuid
+  actionItemId      String           @map("action_item_id") @db.Uuid
+  fromState         ActionItemState? @map("from_state")
+  toState           ActionItemState  @map("to_state")
+  reasonCode        String           @map("reason_code") @db.VarChar(80)
+  actorMembershipId String?          @map("actor_membership_id") @db.Uuid
+  sourceEventId     String           @map("source_event_id") @db.Uuid
+  snapshotJson      Json             @default("{}") @map("snapshot_json") @db.JsonB
+  occurredAt        DateTime         @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, actionItemId, sourceEventId])
+  @@index([tenantId, actionItemId, occurredAt, id])
+  @@map("action_item_transitions")
+}
+
+model KpiJobRun {
+  tenantId      String          @map("tenant_id") @db.Uuid
+  id            String          @default(uuid()) @db.Uuid
+  jobType       String          @map("job_type") @db.VarChar(80)
+  businessDate  DateTime        @map("business_date") @db.Date
+  status        KpiJobRunStatus @default(PENDING)
+  payloadJson   Json            @default("{}") @map("payload_json") @db.JsonB
+  checkpoint    String?         @db.VarChar(255)
+  attempt       Int             @default(0)
+  leaseOwner    String?         @map("lease_owner") @db.VarChar(160)
+  leaseUntil    DateTime?       @map("lease_until") @db.Timestamptz(3)
+  startedAt     DateTime?       @map("started_at") @db.Timestamptz(3)
+  completedAt   DateTime?       @map("completed_at") @db.Timestamptz(3)
+  safeErrorCode String?         @map("safe_error_code") @db.VarChar(100)
+  errorCount    Int             @default(0) @map("error_count")
+  correlationId String          @map("correlation_id") @db.VarChar(100)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, jobType, businessDate])
+  @@index([tenantId, status, leaseUntil, id])
+  @@map("kpi_job_runs")
+}
+
+model ShiftDefinition {
+  tenantId              String      @map("tenant_id") @db.Uuid
+  id                    String      @default(uuid()) @db.Uuid
+  code                  String      @db.VarChar(80)
+  name                  String      @db.VarChar(160)
+  startLocalTime        String      @map("start_local_time") @db.VarChar(5)
+  timezone              String      @db.VarChar(64)
+  status                ShiftStatus @default(ACTIVE)
+  effectiveFromDate     DateTime    @map("effective_from_date") @db.Date
+  effectiveToDate       DateTime?   @map("effective_to_date") @db.Date
+  versionNumber         Int         @map("version_number")
+  createdByMembershipId String      @map("created_by_membership_id") @db.Uuid
+  reason                String      @db.VarChar(500)
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code, versionNumber])
+  @@index([tenantId, status, effectiveFromDate, effectiveToDate])
+  @@map("shift_definitions")
+}
+
+model WorkScheduleVersion {
+  tenantId              String             @map("tenant_id") @db.Uuid
+  id                    String             @default(uuid()) @db.Uuid
+  membershipId          String             @map("membership_id") @db.Uuid
+  branchId              String             @map("branch_id") @db.Uuid
+  businessDate          DateTime           @map("business_date") @db.Date
+  shiftDefinitionId     String?            @map("shift_definition_id") @db.Uuid
+  state                 ScheduleState
+  changeKind            ScheduleChangeKind @map("change_kind")
+  sourceRequestId       String?            @map("source_request_id") @db.Uuid
+  sourceOffCalendarId   String?            @map("source_off_calendar_id") @db.Uuid
+  versionNumber         Int                @map("version_number")
+  effectiveAt           DateTime           @map("effective_at") @db.Timestamptz(3)
+  supersededAt          DateTime?          @map("superseded_at") @db.Timestamptz(3)
+  createdByMembershipId String             @map("created_by_membership_id") @db.Uuid
+  reason                String             @db.VarChar(500)
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, membershipId, businessDate, supersededAt])
+  @@index([tenantId, branchId, businessDate, state])
+  @@index([tenantId, shiftDefinitionId])
+  @@map("work_schedule_versions")
+}
+
+model CompanyOffCalendarVersion {
+  tenantId              String           @map("tenant_id") @db.Uuid
+  id                    String           @default(uuid()) @db.Uuid
+  scopeType             OffCalendarScope @map("scope_type")
+  branchId              String?          @map("branch_id") @db.Uuid
+  name                  String           @db.VarChar(200)
+  startDate             DateTime         @map("start_date") @db.Date
+  endDate               DateTime         @map("end_date") @db.Date
+  timezone              String           @db.VarChar(64)
+  versionNumber         Int              @map("version_number")
+  status                ResourceStatus   @default(ACTIVE)
+  createdByMembershipId String           @map("created_by_membership_id") @db.Uuid
+  reason                String           @db.VarChar(500)
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, scopeType, branchId, name, versionNumber])
+  @@index([tenantId, scopeType, branchId, startDate, endDate, status])
+  @@map("company_off_calendar_versions")
+}
+
+model VideoPolicyVersion {
+  tenantId                    String    @map("tenant_id") @db.Uuid
+  id                          String    @default(uuid()) @db.Uuid
+  scopeType                   ScopeType @map("scope_type")
+  branchId                    String?   @map("branch_id") @db.Uuid
+  versionNumber               Int       @map("version_number")
+  effectiveFromDate           DateTime  @map("effective_from_date") @db.Date
+  effectiveToDate             DateTime? @map("effective_to_date") @db.Date
+  requiresAcknowledgement     Boolean   @default(true) @map("requires_acknowledgement")
+  requiresFullBody            Boolean   @default(true) @map("requires_full_body")
+  requiresWorkArea            Boolean   @default(true) @map("requires_work_area")
+  manualReviewRequired        Boolean   @default(true) @map("manual_review_required")
+  acknowledgementText         String?   @map("acknowledgement_text") @db.Text
+  missingCheckinPenaltyMinor  BigInt    @default(50000) @map("missing_checkin_penalty_minor")
+  videoFailedPenaltyMinor     BigInt    @default(50000) @map("video_failed_penalty_minor")
+  currency                    String    @default("VND") @db.VarChar(3)
+  createdByMembershipId       String    @map("created_by_membership_id") @db.Uuid
+  reason                      String    @db.VarChar(500)
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, scopeType, branchId, versionNumber])
+  @@index([tenantId, scopeType, branchId, effectiveFromDate, effectiveToDate])
+  @@map("video_policy_versions")
+}
+
+model VideoPolicyAcknowledgement {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  id                String   @default(uuid()) @db.Uuid
+  membershipId      String   @map("membership_id") @db.Uuid
+  policyVersionId   String   @map("policy_version_id") @db.Uuid
+  acknowledgedAt    DateTime @default(now()) @map("acknowledged_at") @db.Timestamptz(3)
+  sessionId         String?  @map("session_id") @db.Uuid
+  deviceId          String?  @map("device_id") @db.VarChar(200)
+  action            String   @db.VarChar(40)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, policyVersionId])
+  @@index([tenantId, policyVersionId, acknowledgedAt])
+  @@map("video_policy_acknowledgements")
+}
+
+model AttendanceEvent {
+  tenantId              String                @map("tenant_id") @db.Uuid
+  id                    String                @default(uuid()) @db.Uuid
+  membershipId          String                @map("membership_id") @db.Uuid
+  branchId              String                @map("branch_id") @db.Uuid
+  businessDate          DateTime              @map("business_date") @db.Date
+  scheduleVersionId     String                @map("schedule_version_id") @db.Uuid
+  videoPolicyVersionId  String                @map("video_policy_version_id") @db.Uuid
+  serverRecordedAt      DateTime              @default(now()) @map("server_recorded_at") @db.Timestamptz(3)
+  checkInAt             DateTime?             @map("check_in_at") @db.Timestamptz(3)
+  state                 AttendanceState
+  dayClassification     DayWorkClassification @map("day_classification")
+  classificationReason  String                @map("classification_reason") @db.VarChar(160)
+  sourceRequestId       String?               @map("source_request_id") @db.Uuid
+  correlationId         String                @map("correlation_id") @db.VarChar(100)
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, businessDate])
+  @@index([tenantId, branchId, businessDate, state])
+  @@index([tenantId, scheduleVersionId])
+  @@map("attendance_events")
+}
+
+model CheckInVideoAsset {
+  tenantId               String               @map("tenant_id") @db.Uuid
+  id                     String               @default(uuid()) @db.Uuid
+  attendanceEventId      String               @map("attendance_event_id") @db.Uuid
+  mediaObjectId          String               @map("media_object_id") @db.Uuid
+  originalContentType    String               @map("original_content_type") @db.VarChar(160)
+  originalChecksum       String               @map("original_checksum") @db.VarChar(64)
+  convertedMediaObjectId String?              @map("converted_media_object_id") @db.Uuid
+  processingState        VideoProcessingState @default(REQUESTED) @map("processing_state")
+  attemptCount           Int                  @default(0) @map("attempt_count")
+  lastSafeErrorCode      String?              @map("last_safe_error_code") @db.VarChar(100)
+  requestedAt            DateTime             @default(now()) @map("requested_at") @db.Timestamptz(3)
+  uploadedAt             DateTime?            @map("uploaded_at") @db.Timestamptz(3)
+  readyAt                DateTime?            @map("ready_at") @db.Timestamptz(3)
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, attendanceEventId])
+  @@index([tenantId, processingState, requestedAt, id])
+  @@index([tenantId, mediaObjectId])
+  @@map("checkin_video_assets")
+}
+
+model VideoReviewResult {
+  tenantId               String            @map("tenant_id") @db.Uuid
+  id                     String            @default(uuid()) @db.Uuid
+  attendanceEventId      String            @map("attendance_event_id") @db.Uuid
+  reviewStatus           VideoReviewStatus @map("review_status")
+  reviewedByMembershipId String            @map("reviewed_by_membership_id") @db.Uuid
+  reviewedAt             DateTime          @default(now()) @map("reviewed_at") @db.Timestamptz(3)
+  reason                 String            @db.VarChar(500)
+  failedCriteriaJson     Json              @default("[]") @map("failed_criteria_json") @db.JsonB
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, attendanceEventId, reviewedAt, id])
+  @@map("video_review_results")
+}
+
+model LateOccurrence {
+  tenantId              String   @map("tenant_id") @db.Uuid
+  id                    String   @default(uuid()) @db.Uuid
+  attendanceEventId     String   @map("attendance_event_id") @db.Uuid
+  membershipId          String   @map("membership_id") @db.Uuid
+  branchId              String   @map("branch_id") @db.Uuid
+  businessDate          DateTime @map("business_date") @db.Date
+  shiftStartAt          DateTime @map("shift_start_at") @db.Timestamptz(3)
+  checkInAt             DateTime @map("check_in_at") @db.Timestamptz(3)
+  lateSeconds           Int      @map("late_seconds")
+  lateMinutes           Int      @map("late_minutes")
+  monthlyLateSequence   Int      @map("monthly_late_sequence")
+  firstLateExempt       Boolean  @default(false) @map("first_late_exempt")
+  after15Local          Boolean  @default(false) @map("after_15_local")
+  after18Local          Boolean  @default(false) @map("after_18_local")
+  lateNoticeRequestId   String?  @map("late_notice_request_id") @db.Uuid
+  queueImpactFlag       Boolean  @default(false) @map("queue_impact_flag")
+  policyVersionId       String   @map("policy_version_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, attendanceEventId])
+  @@index([tenantId, membershipId, businessDate])
+  @@index([tenantId, branchId, businessDate, queueImpactFlag])
+  @@map("late_occurrences")
+}
+
+model AttendancePenaltyPolicyVersion {
+  tenantId                         String    @map("tenant_id") @db.Uuid
+  id                               String    @default(uuid()) @db.Uuid
+  scopeType                        ScopeType @map("scope_type")
+  branchId                         String?   @map("branch_id") @db.Uuid
+  versionNumber                    Int       @map("version_number")
+  effectiveFromDate                DateTime  @map("effective_from_date") @db.Date
+  effectiveToDate                  DateTime? @map("effective_to_date") @db.Date
+  timezone                         String    @db.VarChar(64)
+  lateFixed1To15Minor              BigInt    @default(20000) @map("late_fixed_1_15_minor")
+  lateExcessPerMinuteMinor         BigInt    @default(2000) @map("late_excess_per_minute_minor")
+  lateExcessAfterMinutes           Int       @default(15) @map("late_excess_after_minutes")
+  lateMaxThresholdMinutes          Int       @default(90) @map("late_max_threshold_minutes")
+  lateMaxMinor                     BigInt    @default(200000) @map("late_max_minor")
+  lateNoNoticeMinor                BigInt    @default(100000) @map("late_no_notice_minor")
+  suddenLeaveNoNoticeMinor         BigInt    @default(50000) @map("sudden_leave_no_notice_minor")
+  suddenLeaveOverLimitMinor        BigInt    @default(100000) @map("sudden_leave_over_limit_minor")
+  leaveRuleViolationMinor          BigInt    @default(200000) @map("leave_rule_violation_minor")
+  monthlySuddenLeaveFreeDays       Decimal   @default(1) @map("monthly_sudden_leave_free_days") @db.Decimal(6, 2)
+  monthlyAbsenceNotifyThresholdDays Decimal  @default(5) @map("monthly_absence_notify_threshold_days") @db.Decimal(6, 2)
+  currency                         String    @default("VND") @db.VarChar(3)
+  createdByMembershipId            String    @map("created_by_membership_id") @db.Uuid
+  reason                           String    @db.VarChar(500)
+  createdAt                        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, scopeType, branchId, versionNumber])
+  @@index([tenantId, scopeType, branchId, effectiveFromDate, effectiveToDate])
+  @@map("attendance_penalty_policy_versions")
+}
+
+model AttendanceViolation {
+  tenantId          String        @map("tenant_id") @db.Uuid
+  id                String        @default(uuid()) @db.Uuid
+  membershipId      String        @map("membership_id") @db.Uuid
+  branchId          String        @map("branch_id") @db.Uuid
+  businessDate      DateTime      @map("business_date") @db.Date
+  violationKind     ViolationKind @map("violation_kind")
+  sourceType        String        @map("source_type") @db.VarChar(80)
+  sourceId          String        @map("source_id") @db.Uuid
+  policyVersionId   String        @map("policy_version_id") @db.Uuid
+  amountMinor       BigInt        @map("amount_minor")
+  currency          String        @default("VND") @db.VarChar(3)
+  detailsJson       Json          @default("{}") @map("details_json") @db.JsonB
+  assessedAt        DateTime      @default(now()) @map("assessed_at") @db.Timestamptz(3)
+  idempotencyKey    String        @map("idempotency_key") @db.VarChar(160)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, violationKind, sourceType, sourceId, idempotencyKey])
+  @@index([tenantId, membershipId, businessDate, violationKind])
+  @@index([tenantId, branchId, businessDate, violationKind])
+  @@map("attendance_violations")
+}
+
+model PenaltySettlement {
+  tenantId                String                  @map("tenant_id") @db.Uuid
+  id                      String                  @default(uuid()) @db.Uuid
+  membershipId            String                  @map("membership_id") @db.Uuid
+  branchId                String                  @map("branch_id") @db.Uuid
+  businessDate            DateTime                @map("business_date") @db.Date
+  settlementMonth         String                  @map("settlement_month") @db.VarChar(7)
+  baseAmountMinor         BigInt                  @map("base_amount_minor")
+  independentAmountMinor  BigInt                  @map("independent_amount_minor")
+  suppressedAmountMinor   BigInt                  @map("suppressed_amount_minor")
+  totalAmountMinor        BigInt                  @map("total_amount_minor")
+  currency                String                  @default("VND") @db.VarChar(3)
+  status                  PenaltySettlementStatus @default(PENDING)
+  policySnapshotJson      Json                    @default("{}") @map("policy_snapshot_json") @db.JsonB
+  componentSnapshotJson   Json                    @default("[]") @map("component_snapshot_json") @db.JsonB
+  createdAt               DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, businessDate, settlementMonth])
+  @@index([tenantId, branchId, settlementMonth, status, id])
+  @@map("penalty_settlements")
+}
+
+model PenaltyPaymentTransition {
+  tenantId          String                   @map("tenant_id") @db.Uuid
+  id                String                   @default(uuid()) @db.Uuid
+  settlementId      String                   @map("settlement_id") @db.Uuid
+  fromStatus        PenaltySettlementStatus? @map("from_status")
+  toStatus          PenaltySettlementStatus  @map("to_status")
+  amountMinor       BigInt?                  @map("amount_minor")
+  mediaObjectId     String?                  @map("media_object_id") @db.Uuid
+  actorMembershipId String                   @map("actor_membership_id") @db.Uuid
+  reason            String                   @db.VarChar(1000)
+  idempotencyKey    String                   @map("idempotency_key") @db.VarChar(160)
+  occurredAt        DateTime                 @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, actorMembershipId, idempotencyKey])
+  @@index([tenantId, settlementId, occurredAt, id])
+  @@map("penalty_payment_transitions")
+}
+
+model WorkflowDefinitionVersion {
+  tenantId              String      @map("tenant_id") @db.Uuid
+  id                    String      @default(uuid()) @db.Uuid
+  requestType           RequestType @map("request_type")
+  scopeType             ScopeType   @map("scope_type")
+  branchId              String?     @map("branch_id") @db.Uuid
+  versionNumber         Int         @map("version_number")
+  effectiveFromDate     DateTime    @map("effective_from_date") @db.Date
+  effectiveToDate       DateTime?   @map("effective_to_date") @db.Date
+  stepsJson             Json        @map("steps_json") @db.JsonB
+  parallelRuleJson      Json        @default("{}") @map("parallel_rule_json") @db.JsonB
+  createdByMembershipId String      @map("created_by_membership_id") @db.Uuid
+  reason                String      @db.VarChar(500)
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, requestType, scopeType, branchId, versionNumber])
+  @@index([tenantId, requestType, scopeType, branchId, effectiveFromDate, effectiveToDate])
+  @@map("workflow_definition_versions")
+}
+
+model ApprovalRequest {
+  tenantId                  String        @map("tenant_id") @db.Uuid
+  id                        String        @default(uuid()) @db.Uuid
+  requestType               RequestType   @map("request_type")
+  requestedByMembershipId   String        @map("requested_by_membership_id") @db.Uuid
+  branchId                  String        @map("branch_id") @db.Uuid
+  businessDate              DateTime?     @map("business_date") @db.Date
+  scheduleVersionId         String?       @map("schedule_version_id") @db.Uuid
+  workflowVersionId         String        @map("workflow_version_id") @db.Uuid
+  status                    RequestStatus @default(SUBMITTED)
+  payloadJson               Json          @map("payload_json") @db.JsonB
+  submittedAt               DateTime      @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  resolvedAt                DateTime?     @map("resolved_at") @db.Timestamptz(3)
+  reason                    String        @db.VarChar(1000)
+  idempotencyKey            String        @map("idempotency_key") @db.VarChar(160)
+  createdAt                 DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, requestedByMembershipId, requestType, idempotencyKey])
+  @@index([tenantId, branchId, status, submittedAt, id])
+  @@index([tenantId, workflowVersionId])
+  @@map("approval_requests")
+}
+
+model ApprovalRunStep {
+  tenantId              String             @map("tenant_id") @db.Uuid
+  id                    String             @default(uuid()) @db.Uuid
+  approvalRequestId     String             @map("approval_request_id") @db.Uuid
+  stepOrder             Int                @map("step_order")
+  mode                  ApprovalStepMode
+  requiredApprovalCount Int                @map("required_approval_count")
+  status                ApprovalStepStatus @default(PENDING)
+  activatedAt           DateTime?          @map("activated_at") @db.Timestamptz(3)
+  completedAt           DateTime?          @map("completed_at") @db.Timestamptz(3)
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, approvalRequestId, stepOrder])
+  @@index([tenantId, approvalRequestId, status, stepOrder])
+  @@map("approval_run_steps")
+}
+
+model ApprovalDecisionRecord {
+  tenantId             String           @map("tenant_id") @db.Uuid
+  id                   String           @default(uuid()) @db.Uuid
+  approvalRequestId    String           @map("approval_request_id") @db.Uuid
+  stepId               String           @map("step_id") @db.Uuid
+  approverMembershipId String           @map("approver_membership_id") @db.Uuid
+  decision             ApprovalDecision
+  reason               String           @db.VarChar(1000)
+  decidedAt            DateTime         @default(now()) @map("decided_at") @db.Timestamptz(3)
+  idempotencyKey       String           @map("idempotency_key") @db.VarChar(160)
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, approvalRequestId, stepId, approverMembershipId])
+  @@unique([tenantId, approverMembershipId, idempotencyKey])
+  @@index([tenantId, stepId, decidedAt, id])
+  @@map("approval_decision_records")
+}
+
+model LeaveConflictSnapshot {
+  tenantId                String              @map("tenant_id") @db.Uuid
+  id                      String              @default(uuid()) @db.Uuid
+  approvalRequestId       String              @map("approval_request_id") @db.Uuid
+  branchId                String              @map("branch_id") @db.Uuid
+  businessDate            DateTime            @map("business_date") @db.Date
+  departmentId            String?             @map("department_id") @db.Uuid
+  positionId              String?             @map("position_id") @db.Uuid
+  conflictingRequestId    String?             @map("conflicting_request_id") @db.Uuid
+  conflictingMembershipId String?             @map("conflicting_membership_id") @db.Uuid
+  result                  LeaveConflictResult
+  checkedAt               DateTime            @default(now()) @map("checked_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, branchId, businessDate, result])
+  @@index([tenantId, approvalRequestId, checkedAt, id])
+  @@map("leave_conflict_snapshots")
+}
+
+model MonthlyAbsenceSummary {
+  tenantId                   String    @map("tenant_id") @db.Uuid
+  id                         String    @default(uuid()) @db.Uuid
+  membershipId               String    @map("membership_id") @db.Uuid
+  branchId                   String    @map("branch_id") @db.Uuid
+  yearMonth                  String    @map("year_month") @db.VarChar(7)
+  approvedAbsenceDaysDecimal Decimal   @map("approved_absence_days_decimal") @db.Decimal(6, 2)
+  suddenLeaveDaysDecimal     Decimal   @map("sudden_leave_days_decimal") @db.Decimal(6, 2)
+  overThreshold              Boolean   @default(false) @map("over_threshold")
+  thresholdDays              Decimal   @default(5) @map("threshold_days") @db.Decimal(6, 2)
+  notifiedManagerAt          DateTime? @map("notified_manager_at") @db.Timestamptz(3)
+  notificationEffectKey      String?   @map("notification_effect_key") @db.VarChar(200)
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, membershipId, yearMonth, thresholdDays])
+  @@index([tenantId, branchId, yearMonth, overThreshold, id])
+  @@map("monthly_absence_summaries")
+}
+
+model AttendanceJobRun {
+  tenantId         String                 @map("tenant_id") @db.Uuid
+  id               String                 @default(uuid()) @db.Uuid
+  jobType          String                 @map("job_type") @db.VarChar(80)
+  businessDate     DateTime?              @map("business_date") @db.Date
+  yearMonth        String?                @map("year_month") @db.VarChar(7)
+  status           AttendanceJobRunStatus @default(PENDING)
+  checkpointCursor String?                @map("checkpoint_cursor") @db.VarChar(500)
+  leaseOwner       String?                @map("lease_owner") @db.VarChar(160)
+  leaseUntil       DateTime?              @map("lease_until") @db.Timestamptz(3)
+  attempt          Int                    @default(0)
+  safeErrorCode    String?                @map("safe_error_code") @db.VarChar(100)
+  safeErrorMessage String?                @map("safe_error_message") @db.VarChar(500)
+  correlationId    String                 @map("correlation_id") @db.VarChar(100)
+  startedAt        DateTime?              @map("started_at") @db.Timestamptz(3)
+  completedAt      DateTime?              @map("completed_at") @db.Timestamptz(3)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, jobType, businessDate])
+  @@unique([tenantId, jobType, yearMonth])
+  @@index([tenantId, status, leaseUntil, id])
+  @@map("attendance_job_runs")
+}
+
+model MediaRetentionTombstone {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  id                String   @default(uuid()) @db.Uuid
+  mediaObjectId     String?  @map("media_object_id") @db.Uuid
+  sourceType        String   @map("source_type") @db.VarChar(80)
+  sourceId          String?  @map("source_id") @db.Uuid
+  purpose           String   @db.VarChar(50)
+  storageProvider   String   @map("storage_provider") @db.VarChar(32)
+  bucket            String   @db.VarChar(255)
+  objectKey         String   @map("object_key") @db.VarChar(1024)
+  checksumSha256    String   @map("checksum_sha256") @db.VarChar(64)
+  byteSize          BigInt   @map("byte_size")
+  contentType       String   @map("content_type") @db.VarChar(160)
+  policyVersionId   String?  @map("policy_version_id") @db.Uuid
+  legalHoldReleased Boolean  @default(false) @map("legal_hold_released")
+  deletedByJobRunId String?  @map("deleted_by_job_run_id") @db.Uuid
+  deletedAt         DateTime @default(now()) @map("deleted_at") @db.Timestamptz(3)
+  reason            String   @db.VarChar(500)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, storageProvider, bucket, objectKey])
+  @@index([tenantId, sourceType, sourceId, deletedAt])
+  @@map("media_retention_tombstones")
+}
+
+model OutboxEvent {
+  tenantId        String       @map("tenant_id") @db.Uuid
+  id              String       @default(uuid()) @db.Uuid
+  aggregateType   String       @map("aggregate_type") @db.VarChar(80)
+  aggregateId     String       @map("aggregate_id") @db.Uuid
+  eventType       String       @map("event_type") @db.VarChar(100)
+  schemaVersion   Int          @default(1) @map("schema_version")
+  dedupeKey       String       @map("dedupe_key") @db.VarChar(200)
+  payloadRedacted Json         @map("payload_redacted") @db.JsonB
+  status          OutboxStatus @default(PENDING)
+  attempt         Int          @default(0)
+  availableAt     DateTime     @default(now()) @map("available_at") @db.Timestamptz(3)
+  leaseOwner      String?      @map("lease_owner") @db.VarChar(160)
+  leaseUntil      DateTime?    @map("lease_until") @db.Timestamptz(3)
+  sentAt          DateTime?    @map("sent_at") @db.Timestamptz(3)
+  lastSafeError   String?      @map("last_safe_error") @db.VarChar(255)
+  correlationId   String       @map("correlation_id") @db.VarChar(100)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, dedupeKey])
+  @@index([status, availableAt, id])
+  @@index([tenantId, aggregateType, aggregateId, createdAt])
+  @@map("outbox_events")
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Booking and Native Export"
+  short_description: "Build booking controls and native reports"
+  default_prompt: "Use $build-booking-export to implement tenant-safe booking, overlap prevention, photo debt, and Excel or PDF export."

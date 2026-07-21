@@ -1,0 +1,43 @@
+{
+  "name": "adsup",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "corepack pnpm -r --if-present build",
+    "dev:api": "corepack pnpm --filter @adsup/api dev",
+    "dev:worker": "corepack pnpm --filter @adsup/worker dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "test": "vitest run --exclude '**/*.integration.test.ts' --exclude '**/*.contract.test.ts' --exclude 'tests/migration/**'",
+    "test:contract": "vitest run apps/api/tests/contract",
+    "test:integration": "vitest run apps/api/tests/integration apps/worker/tests/integration",
+    "test:migration": "vitest run tests/migration",
+    "test:coverage": "vitest run --coverage",
+    "db:dev": "node scripts/prisma-dev.mjs dev",
+    "db:generate": "corepack pnpm --filter @adsup/database prisma:generate",
+    "db:migrate:deploy": "corepack pnpm --filter @adsup/database prisma:migrate:deploy",
+    "db:seed": "corepack pnpm --filter @adsup/database prisma:seed",
+    "contracts:validate": "vitest run packages/contracts/src/openapi-validation.test.ts",
+    "load:smoke": "node tests/load/smoke-runner.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.0.0",
+    "yaml": "^2.0.0"
+  }
+}
