@@ -14,6 +14,7 @@ const module3PermissionCodes = [
   'workflow.decide',
   'attendance.leave.manage',
   'attendance.off-calendar.manage',
+  'attendance.penalty.self',
   'attendance.penalty.payment.manage',
   'attendance.media.legal-hold',
 ] as const;

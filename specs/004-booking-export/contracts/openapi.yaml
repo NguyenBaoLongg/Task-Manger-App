@@ -1,0 +1,1200 @@
+openapi: 3.1.0
+info:
+  title: Adsup Booking and XLSX Export API
+  version: 0.1.0
+  description: Tenant- and branch-scoped Module 4 contracts. PDF is outside MVP.
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+tags:
+  - name: Customers
+  - name: Booking Configuration
+  - name: Bookings
+  - name: Booking Operations
+  - name: Booking Reports
+  - name: Exports
+paths:
+  /v1/tenants/{tenantId}/customers:
+    get:
+      tags: [Customers]
+      operationId: listCustomers
+      x-permission: booking.customer.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BranchIdQuery'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Scoped customer page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Customers]
+      operationId: createCustomer
+      x-permission: booking.customer.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCustomerRequest' }
+      responses:
+        '201':
+          description: Customer created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/customers/{customerId}:
+    get:
+      tags: [Customers]
+      operationId: getCustomer
+      x-permission: booking.customer.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: Scoped customer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Customers]
+      operationId: updateCustomer
+      x-permission: booking.customer.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCustomerRequest' }
+      responses:
+        '200':
+          description: Customer updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/booking-cancellation-reasons:
+    get:
+      tags: [Booking Configuration]
+      operationId: listBookingCancellationReasons
+      x-permission: booking.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EffectiveAt'
+      responses:
+        '200':
+          description: Effective reasons
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CancellationReasonVersion' }
+    post:
+      tags: [Booking Configuration]
+      operationId: createBookingCancellationReasonVersion
+      x-permission: booking.config.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCancellationReasonRequest' }
+      responses:
+        '201':
+          description: Reason version created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CancellationReasonVersion' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/booking-services:
+    get:
+      tags: [Booking Configuration]
+      operationId: listEffectiveBookingServices
+      x-permission: booking.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BranchIdQuery'
+        - $ref: '#/components/parameters/EffectiveAt'
+      responses:
+        '200':
+          description: Effective services inside actor scope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ServiceOfferingVersion' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Booking Configuration]
+      operationId: createBookingServiceVersion
+      x-permission: booking.config.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateServiceOfferingVersionRequest' }
+      responses:
+        '201':
+          description: Service version created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceOfferingVersion' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/customer-photo-consent-policies:
+    post:
+      tags: [Booking Configuration]
+      operationId: createCustomerPhotoConsentPolicyVersion
+      x-permission: booking.config.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCustomerPhotoConsentPolicyRequest' }
+      responses:
+        '201':
+          description: Immutable consent policy version created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPhotoConsentPolicyVersion' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/customer-photo-consent-policies/effective:
+    get:
+      tags: [Booking Configuration]
+      operationId: getEffectiveCustomerPhotoConsentPolicy
+      x-permission: booking.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EffectiveAt'
+      responses:
+        '200':
+          description: Effective consent policy to display before recording consent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPhotoConsentPolicyVersion' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tenants/{tenantId}/booking-report-destinations:
+    get:
+      tags: [Booking Configuration]
+      operationId: listBookingReportDestinations
+      x-permission: booking.config.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '200':
+          description: Configured destinations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ReportDestination' }
+    put:
+      tags: [Booking Configuration]
+      operationId: replaceBookingReportDestinations
+      x-permission: booking.config.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/ReportDestinationInput' }
+      responses:
+        '200':
+          description: Effective destinations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ReportDestination' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/bookings:
+    get:
+      tags: [Bookings]
+      operationId: listBookings
+      x-permission: booking.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BranchIdQuery'
+        - name: businessDate
+          in: query
+          schema: { type: string, format: date }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/BookingStatus' }
+        - name: assignedMembershipId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Stable booking page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Bookings]
+      operationId: createScheduledBooking
+      x-permission: booking.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateScheduledBookingRequest' }
+      responses:
+        '201':
+          description: Scheduled booking created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/bookings:walk-in:
+    post:
+      tags: [Bookings]
+      operationId: createWalkInBooking
+      x-permission: booking.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWalkInBookingRequest' }
+      responses:
+        '201':
+          description: Walk-in created and arrived
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArrivalResult' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/bookings/{bookingId}:
+    get:
+      tags: [Bookings]
+      operationId: getBooking
+      x-permission: booking.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Booking detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tenants/{tenantId}/bookings/{bookingId}/customer-photo-consents:
+    post:
+      tags: [Booking Operations]
+      operationId: recordCustomerPhotoConsent
+      x-permission: booking.arrival.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCustomerPhotoConsentRequest' }
+      responses:
+        '201':
+          description: Append-only consent recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPhotoConsent' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/bookings/{bookingId}/customer-photo-upload-intents:
+    post:
+      tags: [Booking Operations]
+      operationId: createCustomerPhotoUploadIntent
+      x-permission: booking.arrival.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCustomerPhotoUploadIntentRequest' }
+      responses:
+        '201':
+          description: Upload intent authorized by prior same-scope consent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPhotoUploadIntent' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/bookings/{bookingId}/arrivals:
+    post:
+      tags: [Booking Operations]
+      operationId: recordBookingArrival
+      x-permission: booking.arrival.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordArrivalRequest' }
+      responses:
+        '200':
+          description: Booking arrived with debt state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArrivalResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/bookings/{bookingId}/outcomes:
+    post:
+      tags: [Booking Operations]
+      operationId: recordBookingOutcome
+      x-permission: booking.outcome.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordOutcomeRequest' }
+      responses:
+        '200':
+          description: Outcome recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/bookings/{bookingId}/reschedules:
+    post:
+      tags: [Booking Operations]
+      operationId: rescheduleBooking
+      x-permission: booking.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RescheduleBookingRequest' }
+      responses:
+        '201':
+          description: Replacement booking created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RescheduleResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/bookings/{bookingId}/tour-completions:
+    post:
+      tags: [Booking Operations]
+      operationId: completeBookingTour
+      x-permission: booking.tour.complete
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompleteTourRequest' }
+      responses:
+        '201':
+          description: Tour completed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TourCompletion' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/booking-photo-debts:
+    get:
+      tags: [Booking Operations]
+      operationId: listBookingPhotoDebts
+      x-permission: booking.photo-debt.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/BranchIdQuery'
+        - name: state
+          in: query
+          schema: { type: string, enum: [OPEN, RESOLVED, WAIVED] }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Scoped photo debt page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhotoDebtPage' }
+  /v1/tenants/{tenantId}/booking-reports:rerun:
+    post:
+      tags: [Booking Reports]
+      operationId: rerunBookingReport
+      x-permission: booking.report.rerun
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reportType, businessDate, reason]
+              properties:
+                reportType: { $ref: '#/components/schemas/BookingReportType' }
+                businessDate: { type: string, format: date }
+                branchIds:
+                  type: array
+                  maxItems: 500
+                  items: { type: string, format: uuid }
+                reason: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        '202':
+          description: Rerun queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobRun' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/booking-retention-policies:
+    post:
+      tags: [Booking Configuration]
+      operationId: createBookingRetentionPolicyVersion
+      x-permission: booking.retention.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingRetentionPolicyRequest' }
+      responses:
+        '201':
+          description: Retention policy version created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingRetentionPolicyVersion' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/booking-retention-policies/effective:
+    get:
+      tags: [Booking Configuration]
+      operationId: getEffectiveBookingRetentionPolicy
+      x-permission: booking.config.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EffectiveAt'
+      responses:
+        '200':
+          description: Effective retention policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingRetentionPolicyVersion' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tenants/{tenantId}/booking-media/{mediaId}/legal-hold:
+    post:
+      tags: [Booking Configuration]
+      operationId: changeBookingMediaLegalHold
+      x-permission: booking.legal-hold.manage
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/MediaId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangeLegalHoldRequest' }
+      responses:
+        '200':
+          description: Legal hold state changed with audit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalHoldResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tenants/{tenantId}/exports:
+    get:
+      tags: [Exports]
+      operationId: listExports
+      x-permission: booking.export.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Requester's visible exports
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportPage' }
+    post:
+      tags: [Exports]
+      operationId: createXlsxExport
+      x-permission: booking.export.create
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateExportRequest' }
+      responses:
+        '202':
+          description: Export queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Export' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/tenants/{tenantId}/exports/{exportId}:
+    get:
+      tags: [Exports]
+      operationId: getExport
+      x-permission: booking.export.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: Export state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Export' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tenants/{tenantId}/exports/{exportId}/download-url:
+    post:
+      tags: [Exports]
+      operationId: createExportDownloadUrl
+      x-permission: booking.export.download
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/ExportId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Short-lived download URL after current-scope authorization
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignedDownload' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ExportId:
+      name: exportId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MediaId:
+      name: mediaId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 160 }
+    BranchIdQuery:
+      name: branchId
+      in: query
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 500 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    EffectiveAt:
+      name: effectiveAt
+      in: query
+      schema: { type: string, format: date-time }
+  responses:
+    Forbidden:
+      description: Authenticated but outside permission/scope
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Resource absent or hidden by tenant/scope
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: State, idempotency or booking conflict
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unprocessable:
+      description: Business validation failed
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code, correlationId]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        detail: { type: string }
+        correlationId: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [path, code]
+            properties:
+              path: { type: string }
+              code: { type: string }
+    Customer:
+      type: object
+      required: [id, displayName, branchIds, stateVersion, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'], format: email }
+        note: { type: [string, 'null'] }
+        branchIds:
+          type: array
+          items: { type: string, format: uuid }
+        stateVersion: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateCustomerRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, branchIds]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 160 }
+        phone: { type: string, minLength: 6, maxLength: 30 }
+        email: { type: string, format: email, maxLength: 254 }
+        note: { type: string, maxLength: 1000 }
+        branchIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    UpdateCustomerRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion]
+      minProperties: 2
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 160 }
+        phone: { type: [string, 'null'], minLength: 6, maxLength: 30 }
+        email: { type: [string, 'null'], format: email, maxLength: 254 }
+        note: { type: [string, 'null'], maxLength: 1000 }
+        branchIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        expectedStateVersion: { type: integer, minimum: 1 }
+    CustomerPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Customer' }
+        nextCursor: { type: [string, 'null'] }
+    BookingStatus:
+      type: string
+      enum: [SCHEDULED, ARRIVED, NO_SHOW, CANCELLED, RESCHEDULED]
+    BookingReportType:
+      type: string
+      enum: [TOMORROW_SCHEDULE, TODAY_OUTCOME]
+    ServiceOfferingVersion:
+      type: object
+      required: [id, serviceOfferingId, code, name, versionNumber, branchIds, status, effectiveFrom]
+      properties:
+        id: { type: string, format: uuid }
+        serviceOfferingId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        versionNumber: { type: integer, minimum: 1 }
+        branchIds:
+          type: array
+          items: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        effectiveFrom: { type: string, format: date-time }
+    CreateServiceOfferingVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, branchIds, effectiveFrom]
+      properties:
+        serviceOfferingId: { type: string, format: uuid }
+        code: { type: string, pattern: '^[A-Z0-9_]{2,50}$' }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 1000 }
+        branchIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+        effectiveFrom: { type: string, format: date-time }
+    Booking:
+      type: object
+      required:
+        [id, branchId, customerId, serviceOfferingId, assignedMembershipId, bookingType,
+         scheduledStartAt, businessDate, timezoneSnapshot, status, stateVersion, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        serviceOfferingId: { type: string, format: uuid }
+        assignedMembershipId: { type: string, format: uuid }
+        bookingType: { type: string, enum: [SCHEDULED, WALK_IN] }
+        scheduledStartAt: { type: string, format: date-time }
+        businessDate: { type: string, format: date }
+        timezoneSnapshot: { type: string }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        formSubmissionId: { type: [string, 'null'], format: uuid }
+        formVersionId: { type: [string, 'null'], format: uuid }
+        rescheduledFromId: { type: [string, 'null'], format: uuid }
+        rescheduledToId: { type: [string, 'null'], format: uuid }
+        stateVersion: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+    BookingDetail:
+      allOf:
+        - $ref: '#/components/schemas/Booking'
+        - type: object
+          required: [transitions]
+          properties:
+            transitions:
+              type: array
+              items: { $ref: '#/components/schemas/BookingTransition' }
+            photoDebt: { oneOf: [{ $ref: '#/components/schemas/PhotoDebt' }, { type: 'null' }] }
+            tourCompletion: { oneOf: [{ $ref: '#/components/schemas/TourCompletion' }, { type: 'null' }] }
+    BookingTransition:
+      type: object
+      required: [id, toStatus, actorMembershipId, occurredAt]
+      properties:
+        id: { type: string, format: uuid }
+        fromStatus: { oneOf: [{ $ref: '#/components/schemas/BookingStatus' }, { type: 'null' }] }
+        toStatus: { $ref: '#/components/schemas/BookingStatus' }
+        reasonCode: { type: [string, 'null'] }
+        reasonLabel: { type: [string, 'null'] }
+        actorMembershipId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+    BookingPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Booking' }
+        nextCursor: { type: [string, 'null'] }
+    CreateScheduledBookingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [branchId, customerId, serviceOfferingId, assignedMembershipId, scheduledStartAt,
+         formTemplateId, formVersionId, formData]
+      properties:
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        serviceOfferingId: { type: string, format: uuid }
+        assignedMembershipId: { type: string, format: uuid }
+        scheduledStartAt: { type: string, format: date-time }
+        formTemplateId: { type: string, format: uuid }
+        formVersionId: { type: string, format: uuid }
+        formData: { type: object }
+    CreateWalkInBookingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [branchId, customerId, serviceOfferingId, assignedMembershipId, consentMethod,
+         consentPolicyVersionId, formTemplateId, formVersionId, formData]
+      properties:
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        serviceOfferingId: { type: string, format: uuid }
+        assignedMembershipId: { type: string, format: uuid }
+        consentMethod: { type: string, enum: [VERBAL, WRITTEN, OTHER] }
+        consentPolicyVersionId: { type: string, format: uuid }
+        formTemplateId: { type: string, format: uuid }
+        formVersionId: { type: string, format: uuid }
+        formData: { type: object }
+    RecordArrivalRequest:
+      type: object
+      additionalProperties: false
+      required: [consentId, expectedStateVersion]
+      properties:
+        consentId: { type: string, format: uuid }
+        customerPhotoMediaId: { type: string, format: uuid }
+        expectedStateVersion: { type: integer, minimum: 1 }
+    ArrivalResult:
+      type: object
+      required: [booking, consentId, photoDebt]
+      properties:
+        booking: { $ref: '#/components/schemas/Booking' }
+        consentId: { type: string, format: uuid }
+        photoDebt: { oneOf: [{ $ref: '#/components/schemas/PhotoDebt' }, { type: 'null' }] }
+    RecordOutcomeRequest:
+      type: object
+      additionalProperties: false
+      required: [outcome, reasonVersionId, expectedStateVersion]
+      properties:
+        outcome: { type: string, enum: [NO_SHOW, CANCELLED] }
+        reasonVersionId: { type: string, format: uuid }
+        evidenceMediaId: { type: string, format: uuid }
+        expectedStateVersion: { type: integer, minimum: 1 }
+    CreateCustomerPhotoConsentRequest:
+      type: object
+      additionalProperties: false
+      required: [method, policyVersionId]
+      properties:
+        method: { type: string, enum: [VERBAL, WRITTEN, OTHER] }
+        policyVersionId: { type: string, format: uuid }
+    CustomerPhotoConsentPolicyVersion:
+      type: object
+      required: [id, versionNumber, title, policyText, allowedMethods, status, effectiveFrom]
+      properties:
+        id: { type: string, format: uuid }
+        versionNumber: { type: integer, minimum: 1 }
+        title: { type: string }
+        policyText: { type: string }
+        allowedMethods:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [VERBAL, WRITTEN, OTHER] }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        effectiveFrom: { type: string, format: date-time }
+    CreateCustomerPhotoConsentPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [title, policyText, allowedMethods, effectiveFrom]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        policyText: { type: string, minLength: 1, maxLength: 10000 }
+        allowedMethods:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [VERBAL, WRITTEN, OTHER] }
+        status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+        effectiveFrom: { type: string, format: date-time }
+    CustomerPhotoConsent:
+      type: object
+      required: [id, bookingId, customerId, method, policyVersionId, actorMembershipId, recordedAt]
+      properties:
+        id: { type: string, format: uuid }
+        bookingId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        method: { type: string, enum: [VERBAL, WRITTEN, OTHER] }
+        policyVersionId: { type: string, format: uuid }
+        actorMembershipId: { type: string, format: uuid }
+        recordedAt: { type: string, format: date-time }
+    CreateCustomerPhotoUploadIntentRequest:
+      type: object
+      additionalProperties: false
+      required: [consentId, contentType, byteSize, checksumSha256]
+      properties:
+        consentId: { type: string, format: uuid }
+        contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        byteSize: { type: integer, minimum: 1 }
+        checksumSha256: { type: string, pattern: '^[A-Fa-f0-9]{64}$' }
+    CustomerPhotoUploadIntent:
+      type: object
+      required: [consentId, mediaId, uploadUrl, expiresAt]
+      properties:
+        consentId: { type: string, format: uuid }
+        mediaId: { type: string, format: uuid }
+        uploadUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+    RescheduleBookingRequest:
+      type: object
+      additionalProperties: false
+      required: [scheduledStartAt, assignedMembershipId, reasonVersionId, expectedStateVersion]
+      properties:
+        scheduledStartAt: { type: string, format: date-time }
+        assignedMembershipId: { type: string, format: uuid }
+        reasonVersionId: { type: string, format: uuid }
+        expectedStateVersion: { type: integer, minimum: 1 }
+    RescheduleResult:
+      type: object
+      required: [source, replacement]
+      properties:
+        source: { $ref: '#/components/schemas/Booking' }
+        replacement: { $ref: '#/components/schemas/Booking' }
+    CompleteTourRequest:
+      type: object
+      additionalProperties: false
+      required: [customerPhotoMediaId, expectedBookingStateVersion]
+      properties:
+        customerPhotoMediaId: { type: string, format: uuid }
+        formSubmissionId: { type: string, format: uuid }
+        expectedBookingStateVersion: { type: integer, minimum: 1 }
+    TourCompletion:
+      type: object
+      required:
+        [id, bookingId, branchId, performedByMembershipId, customerPhotoMediaId,
+         businessDate, completedAt]
+      properties:
+        id: { type: string, format: uuid }
+        bookingId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        performedByMembershipId: { type: string, format: uuid }
+        customerPhotoMediaId: { type: string, format: uuid }
+        businessDate: { type: string, format: date }
+        completedAt: { type: string, format: date-time }
+    PhotoDebt:
+      type: object
+      required: [id, bookingId, branchId, ownerMembershipId, state, openedAt]
+      properties:
+        id: { type: string, format: uuid }
+        bookingId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        ownerMembershipId: { type: string, format: uuid }
+        state: { type: string, enum: [OPEN, RESOLVED, WAIVED] }
+        actionItemId: { type: [string, 'null'], format: uuid }
+        resolvedMediaId: { type: [string, 'null'], format: uuid }
+        openedAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+    PhotoDebtPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PhotoDebt' }
+        nextCursor: { type: [string, 'null'] }
+    CancellationReasonVersion:
+      type: object
+      required: [id, code, label, versionNumber, status, effectiveFrom]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        label: { type: string }
+        versionNumber: { type: integer, minimum: 1 }
+        appliesToCancellation: { type: boolean }
+        appliesToReschedule: { type: boolean }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        effectiveFrom: { type: string, format: date-time }
+    CreateCancellationReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [code, label, appliesToCancellation, appliesToReschedule, effectiveFrom]
+      properties:
+        reasonId: { type: string, format: uuid }
+        code: { type: string, pattern: '^[A-Z0-9_]{2,50}$' }
+        label: { type: string, minLength: 1, maxLength: 160 }
+        appliesToCancellation: { type: boolean }
+        appliesToReschedule: { type: boolean }
+        status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+        effectiveFrom: { type: string, format: date-time }
+    ReportDestinationInput:
+      type: object
+      additionalProperties: false
+      required: [reportType, chatChannelId]
+      properties:
+        branchId: { type: string, format: uuid }
+        reportType: { $ref: '#/components/schemas/BookingReportType' }
+        chatChannelId: { type: string, format: uuid }
+    ReportDestination:
+      allOf:
+        - $ref: '#/components/schemas/ReportDestinationInput'
+        - type: object
+          required: [id, effectiveFrom]
+          properties:
+            id: { type: string, format: uuid }
+            effectiveFrom: { type: string, format: date-time }
+    JobRun:
+      type: object
+      required: [id, jobType, businessDate, state, attempt]
+      properties:
+        id: { type: string, format: uuid }
+        jobType: { type: string }
+        businessDate: { type: string, format: date }
+        state: { type: string, enum: [PENDING, RUNNING, SUCCEEDED, RETRYABLE, FAILED] }
+        attempt: { type: integer, minimum: 0 }
+    BookingRetentionPolicyVersion:
+      type: object
+      required: [id, versionNumber, customerPhotoDays, xlsxDays, effectiveFrom]
+      properties:
+        id: { type: string, format: uuid }
+        versionNumber: { type: integer, minimum: 1 }
+        customerPhotoDays: { type: integer, minimum: 1, maximum: 3650 }
+        xlsxDays: { type: integer, minimum: 1, maximum: 365 }
+        effectiveFrom: { type: string, format: date-time }
+    CreateBookingRetentionPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [customerPhotoDays, xlsxDays, effectiveFrom]
+      properties:
+        customerPhotoDays: { type: integer, minimum: 1, maximum: 3650, default: 180 }
+        xlsxDays: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        effectiveFrom: { type: string, format: date-time }
+    ChangeLegalHoldRequest:
+      type: object
+      additionalProperties: false
+      required: [action, reason]
+      properties:
+        action: { type: string, enum: [PLACE, RELEASE] }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    LegalHoldResult:
+      type: object
+      required: [mediaId, held, changedAt]
+      properties:
+        mediaId: { type: string, format: uuid }
+        held: { type: boolean }
+        changedAt: { type: string, format: date-time }
+    CreateExportRequest:
+      type: object
+      additionalProperties: false
+      required: [format, dataTypes, dateFrom, dateTo, branchIds]
+      properties:
+        format: { type: string, const: XLSX }
+        dataTypes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [BOOKINGS, TOURS, KPI, PENALTIES, ACTION_ITEMS] }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date }
+        branchIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        departmentIds:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        membershipIds:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    Export:
+      type: object
+      required:
+        [id, format, dataTypes, dateFrom, dateTo, branchIds, state, progressRows, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        format: { type: string, const: XLSX }
+        dataTypes:
+          type: array
+          items: { type: string }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date }
+        branchIds:
+          type: array
+          items: { type: string, format: uuid }
+        state: { type: string, enum: [PENDING, RUNNING, READY, RETRYABLE, FAILED, EXPIRED] }
+        progressRows: { type: integer, minimum: 0 }
+        byteSize: { type: [integer, 'null'], minimum: 0 }
+        checksumSha256: { type: [string, 'null'], pattern: '^[a-f0-9]{64}$' }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        safeErrorCode: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    ExportPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Export' }
+        nextCursor: { type: [string, 'null'] }
+    SignedDownload:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }

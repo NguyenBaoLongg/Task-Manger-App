@@ -7,7 +7,8 @@
     "prisma/seed.ts",
     "prisma/verify-seed.ts",
     "prisma/verify-kpi-seed.ts",
-    "prisma/verify-timekeeping-seed.ts"
+    "prisma/verify-timekeeping-seed.ts",
+    "prisma/verify-booking-seed.ts"
   ],
   "references": [{ "path": "../config" }, { "path": "../domain" }]
 }

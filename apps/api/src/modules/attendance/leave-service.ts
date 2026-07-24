@@ -8,7 +8,7 @@ import {
   systemClock,
   type Clock,
 } from '@adsup/domain';
-import type { AttendanceRepository } from '@adsup/database';
+import type { AttendanceRepository, DatabaseTransaction, PenaltyRepository } from '@adsup/database';
 
 type LeaveRequestType = 'LEAVE_SCHEDULE' | 'SUDDEN_LEAVE';
 type LeaveDurationKind = 'FULL_DAY' | 'MORNING_HALF' | 'DATE_RANGE';
@@ -25,7 +25,16 @@ export class LeaveService {
   constructor(
     private readonly repository: AttendanceRepository,
     private readonly clock: Clock = systemClock,
+    private readonly penalties?: PenaltyRepository,
   ) {}
+
+  inTransaction(transaction: DatabaseTransaction) {
+    return new LeaveService(
+      this.repository.inTransaction(transaction),
+      this.clock,
+      this.penalties?.inTransaction(transaction),
+    );
+  }
 
   async validateBeforeSubmit(input: {
     tenantId: string;
@@ -44,8 +53,7 @@ export class LeaveService {
       branchId: input.branchId,
       at: parseBusinessDate(dates[0]!),
     });
-    const assignment = assignments[0];
-    if (!assignment) {
+    if (!assignments.length) {
       throw new ProblemError(
         422,
         'NO_ACTIVE_BRANCH',
@@ -68,6 +76,16 @@ export class LeaveService {
       hasApprovedException: Boolean(payload.exceptionEvidence),
     });
     if (!consecutive.allowed) {
+      const violationDate = parseBusinessDate(dates[0]!);
+      await this.penalties?.assessLeaveRuleViolation({
+        tenantId: input.tenantId,
+        membershipId: input.requestedByMembershipId,
+        branchId: input.branchId,
+        businessDate: violationDate,
+        sourceType: 'MEMBERSHIP_LEAVE_RULE',
+        sourceId: input.requestedByMembershipId,
+        correlationId: `leave-rule:${input.requestedByMembershipId}:${dates[0]}`,
+      });
       throw new ProblemError(
         422,
         'BUSINESS_RULE_VIOLATION',
@@ -82,8 +100,10 @@ export class LeaveService {
       requestType: input.requestType,
       requestedByMembershipId: input.requestedByMembershipId,
       branchId: input.branchId,
-      departmentId: assignment.departmentId,
-      positionId: assignment.positionId,
+      assignments: assignments.map((assignment) => ({
+        departmentId: assignment.departmentId,
+        positionId: assignment.positionId,
+      })),
       dates,
       excludeRequestId: input.excludeRequestId,
     });
@@ -99,8 +119,7 @@ export class LeaveService {
       payload,
       dates,
       businessDate: parseBusinessDate(dates[0]!),
-      departmentId: assignment.departmentId,
-      positionId: assignment.positionId,
+      assignments,
     };
   }
 
@@ -115,15 +134,17 @@ export class LeaveService {
     if (!isLeaveType(input.requestType)) return;
     const checked = await this.validateBeforeSubmit(input);
     if (!checked) return;
-    await this.repository.createLeaveConflictSnapshots({
-      tenantId: input.tenantId,
-      approvalRequestId: input.approvalRequestId,
-      branchId: input.branchId,
-      dates: checked.dates.map(parseBusinessDate),
-      departmentId: checked.departmentId,
-      positionId: checked.positionId,
-      result: 'CLEAR',
-    });
+    for (const assignment of checked.assignments) {
+      await this.repository.createLeaveConflictSnapshots({
+        tenantId: input.tenantId,
+        approvalRequestId: input.approvalRequestId,
+        branchId: input.branchId,
+        dates: checked.dates.map(parseBusinessDate),
+        departmentId: assignment.departmentId,
+        positionId: assignment.positionId,
+        result: 'CLEAR',
+      });
+    }
   }
 
   async applyApprovedLeaveRequest(input: {
@@ -162,7 +183,10 @@ export class LeaveService {
         input.request.requestedByMembershipId,
         businessDate,
       );
-      if (current?.sourceRequestId === input.request.id && current.state === 'LEAVE_APPROVED') {
+      if (
+        current?.sourceRequestId === input.request.id &&
+        current.leaveDurationKind === payload.durationKind
+      ) {
         continue;
       }
       const assignments = await this.repository.getActiveAssignments({
@@ -179,13 +203,22 @@ export class LeaveService {
           'Nhan su chua co co so hieu luc cho ngay nghi.',
         );
       }
+      const isMorningHalf = payload.durationKind === 'MORNING_HALF';
+      if (isMorningHalf && !current?.shiftDefinitionId) {
+        throw new ProblemError(
+          422,
+          'BUSINESS_RULE_VIOLATION',
+          'Nghi buoi sang can mot ca lam hieu luc.',
+        );
+      }
       await this.repository.createScheduleVersion({
         tenantId: input.request.tenantId,
         membershipId: input.request.requestedByMembershipId,
         branchId: assignment.branchId,
         businessDate,
-        shiftDefinitionId: null,
-        state: 'LEAVE_APPROVED',
+        shiftDefinitionId: isMorningHalf ? current!.shiftDefinitionId : null,
+        state: isMorningHalf ? 'ADJUSTED' : 'LEAVE_APPROVED',
+        leaveDurationKind: payload.durationKind,
         changeKind: 'LEAVE_APPROVAL',
         sourceRequestId: input.request.id,
         effectiveAt: this.clock.now(),
@@ -195,15 +228,24 @@ export class LeaveService {
       });
       applied += 1;
     }
-    await this.repository.createLeaveConflictSnapshots({
-      tenantId: input.request.tenantId,
-      approvalRequestId: input.request.id,
-      branchId: input.request.branchId,
-      dates: checked.dates.map(parseBusinessDate),
-      departmentId: checked.departmentId,
-      positionId: checked.positionId,
-      result: 'CLEAR',
-    });
+    for (const assignment of checked.assignments) {
+      await this.repository.createLeaveConflictSnapshots({
+        tenantId: input.request.tenantId,
+        approvalRequestId: input.request.id,
+        branchId: input.request.branchId,
+        dates: checked.dates.map(parseBusinessDate),
+        departmentId: assignment.departmentId,
+        positionId: assignment.positionId,
+        result: 'CLEAR',
+      });
+    }
+    if (input.request.requestType === 'SUDDEN_LEAVE') {
+      await this.penalties?.assessSuddenLeaveRequest({
+        tenantId: input.request.tenantId,
+        approvalRequestId: input.request.id,
+        correlationId: input.correlationId,
+      });
+    }
     return {
       applied: true,
       dates: checked.dates,
@@ -217,8 +259,7 @@ export class LeaveService {
     requestType: string;
     requestedByMembershipId: string;
     branchId: string;
-    departmentId?: string | null;
-    positionId?: string | null;
+    assignments: Array<{ departmentId?: string | null; positionId?: string | null }>;
     dates: string[];
     excludeRequestId?: string;
   }) {
@@ -240,26 +281,31 @@ export class LeaveService {
         branchId: candidate.branchId,
         at: parseBusinessDate(candidateDates[0]!),
       });
-      const assignment = assignments[0];
-      existing.push({
-        requestId: candidate.id,
-        membershipId: candidate.requestedByMembershipId,
-        branchId: candidate.branchId,
-        departmentId: assignment?.departmentId,
-        positionId: assignment?.positionId,
-        dates: candidateDates,
-      });
+      for (const assignment of assignments) {
+        existing.push({
+          requestId: candidate.id,
+          membershipId: candidate.requestedByMembershipId,
+          branchId: candidate.branchId,
+          departmentId: assignment.departmentId,
+          positionId: assignment.positionId,
+          dates: candidateDates,
+        });
+      }
     }
-    return findLeaveConflict({
-      request: {
-        membershipId: input.requestedByMembershipId,
-        branchId: input.branchId,
-        departmentId: input.departmentId,
-        positionId: input.positionId,
-        dates: input.dates,
-      },
-      existing,
-    });
+    for (const assignment of input.assignments) {
+      const conflict = findLeaveConflict({
+        request: {
+          membershipId: input.requestedByMembershipId,
+          branchId: input.branchId,
+          departmentId: assignment.departmentId,
+          positionId: assignment.positionId,
+          dates: input.dates,
+        },
+        existing,
+      });
+      if (conflict.result === 'CONFLICT') return conflict;
+    }
+    return { result: 'CLEAR' as const };
   }
 }
 

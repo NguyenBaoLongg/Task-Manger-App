@@ -34,6 +34,7 @@ Use `ui-ux-pro-max`, `design-system`, and `ui-styling` for the mobile stage. Use
 
 - Run project-local Spec Kit with `& .\.tools\specify.ps1 <arguments>`.
 - Run UI/UX Pro Max search with `& .\.tools\uiux.ps1 <arguments>`.
+- Run project-local Graphify with `& .\.tools\graphify.ps1 <arguments>`.
 - Use PowerShell scripts under `.specify/scripts/powershell/` on Windows.
 
 ## Verification
@@ -42,3 +43,16 @@ Use `ui-ux-pro-max`, `design-system`, and `ui-styling` for the mobile stage. Use
 - Run relevant migrations, typecheck, lint, unit tests, integration tests, build, and mobile accessibility checks before marking a module complete.
 - Do not require live AWS, FCM, or APNs credentials for local tests; use adapters and test doubles while preserving production-ready interfaces.
 - Preserve and audit historical schedule, KPI, policy, penalty, booking-status, and membership changes.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For codebase questions, first run `& .\.tools\graphify.ps1 query "<question>"` when graphify-out/graph.json exists. Use `& .\.tools\graphify.ps1 path "<A>" "<B>"` for relationships and `& .\.tools\graphify.ps1 explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `& .\.tools\graphify.ps1 update .` to keep the graph current (AST-only, no API cost).

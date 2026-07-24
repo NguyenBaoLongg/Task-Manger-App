@@ -17,6 +17,9 @@ import {
   OrganizationRbacRepository,
   PenaltyRepository,
   WorkflowRepository,
+  BookingRepository,
+  BookingWorkerRepository,
+  ExportRepository,
   createDatabaseClient,
 } from '@adsup/database';
 import { ProblemError, type RealtimePort } from '@adsup/domain';
@@ -68,6 +71,7 @@ const auditRepo = new AuditRepository(database);
 const governance = new GovernanceRepository(database, config.jwtAccessSecret, metrics);
 const kpiRepo = new KpiRepository(database);
 const attendanceRepo = new AttendanceRepository(database);
+const penaltyRepo = new PenaltyRepository(database);
 const kpiConfigService = new KpiConfigService(kpiRepo);
 const kpiPolicyService = new KpiPolicyService(kpiRepo);
 const kpiReportService = new KpiReportService(kpiRepo);
@@ -97,20 +101,22 @@ const kpiProgressService = new KpiProgressService(
 const kpiEvaluationService = new KpiEvaluationService(kpiRepo, new KpiWorkerRepository(database));
 const kpiPenaltyService = new KpiPenaltyService(kpiRepo);
 const scheduleService = new ScheduleService(attendanceRepo, undefined, actionItemRepo);
-const attendanceService = new AttendanceService(attendanceRepo);
-const videoReviewService = new VideoReviewService(attendanceRepo);
-const leaveService = new LeaveService(attendanceRepo);
+const attendanceService = new AttendanceService(attendanceRepo, undefined, penaltyRepo);
+const videoReviewService = new VideoReviewService(attendanceRepo, penaltyRepo);
+const leaveService = new LeaveService(attendanceRepo, undefined, penaltyRepo);
 const offCalendarService = new OffCalendarService(attendanceRepo);
 const absenceService = new AbsenceService(attendanceRepo);
 const workflowService = new WorkflowService(
   new WorkflowRepository(database),
-  new WorkflowEffects(leaveService),
+  new WorkflowEffects(leaveService, attendanceRepo, penaltyRepo),
   undefined,
   leaveService,
 );
-const penaltyRepo = new PenaltyRepository(database);
 const penaltyService = new PenaltyService(penaltyRepo, actionItemRepo);
 const attendanceWorkerRepo = new AttendanceWorkerRepository(database);
+const bookingRepo = new BookingRepository(database);
+const bookingWorkerRepo = new BookingWorkerRepository(database);
+const exportRepo = new ExportRepository(database);
 const notImplemented = () => {
   throw new ProblemError(
     422,
@@ -119,6 +125,9 @@ const notImplemented = () => {
   );
 };
 void attendanceWorkerRepo;
+void bookingRepo;
+void bookingWorkerRepo;
+void exportRepo;
 void notImplemented;
 const tokens = new TokenService(
   config.jwtAccessSecret,
@@ -197,6 +206,9 @@ const app = createApp({
   penalties: {
     penaltyService,
   },
+  bookings: {},
+  bookingConfig: {},
+  bookingExports: {},
   metrics,
   readiness: async () => {
     try {

@@ -94,7 +94,8 @@ Constraints/indexes:
 
 - Unique `(tenant_id,tenant_membership_id,business_date)` for the canonical attendance event.
 - Snapshot schedule/policy/branch cannot be changed after confirmed evaluation; corrections are separate transitions.
-- `NON_WORKED_NO_CHECKIN` after 18:00 exempts daily KPI report requirement but not attendance violations.
+- `NON_WORKED_NO_CHECKIN` after the 12:00 tenant-local cutoff creates the missing-check-in violation; without a later
+  check-in or approved correction, the day is exempt from daily KPI report requirement but not attendance violations.
 
 ### `CheckInVideoAsset`
 
@@ -267,6 +268,7 @@ Uses existing Module 2 `ActionItem` projection with source types:
 - `APPROVAL_NEEDS_INFO`
 - `PENALTY_PAYMENT_DUE`
 - `ABSENCE_OVER_THRESHOLD`
+- `ATTENDANCE_CHECKIN_REMINDER`
 
 ### `AttendanceJobRun`
 
@@ -276,13 +278,30 @@ Fields: `tenant_id`, `id`, `job_type`, `business_date?`, `year_month?`, `status`
 Unique natural keys:
 
 - `(tenant_id,job_type,business_date)` for day close/video missing check-in.
+- Pre-shift reminder effect key: `(tenant_id, branch_id, business_date, shift_definition_id, reminder_lead_minutes)`.
+- Final reminder effect key: `(tenant_id, branch_id, business_date, shift_definition_id, cutoff_local_time, reminder_lead_minutes)`.
 - `(tenant_id,job_type,year_month)` for monthly absence summary.
 
 ### `OutboxEvent`
 
 Reuse Module 2 event envelope. Module 3 events use redacted payloads only: IDs, state, business date,
-amount summaries, effect keys and safe reason codes. No video URL, raw evidence payload, device token or
-personal chat message body appears in outbox/logs.
+amount summaries, effect keys, mention membership IDs/display names for system reminders and safe reason codes.
+No video URL, raw evidence payload, device token or user-authored personal chat message body appears in outbox/logs.
+
+### `CheckInReminderEvent`
+
+Fields in redacted payload: `tenant_id`, `branch_id`, `business_date`, `shift_definition_id`, `shift_code`,
+`shift_start_local_time`, `reminder_kind`, `reminder_lead_minutes`, `cutoff_local_time?`,
+`mention_membership_ids`, `mention_display_names`,
+system-generated `message_body`, `dedupe_key`, timestamps.
+
+Rules:
+
+- Created 15 minutes before each shift start in tenant-local time.
+- Created again as a final warning one hour before the missing-check-in cutoff, default 11:00 for the 12:00 cutoff.
+- Includes only active scheduled memberships without check-in at reminder time.
+- Excludes `OFF`, approved leave and already checked-in memberships.
+- Retry-safe; same tenant/branch/date/shift/reminder-kind/cutoff/lead-minute key does not create a second bot reminder.
 
 ## Existing relationships
 

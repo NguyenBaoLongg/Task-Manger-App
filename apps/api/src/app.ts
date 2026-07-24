@@ -40,6 +40,15 @@ import {
   penaltyRoutes,
   type PenaltyRoutesDependencies,
 } from './modules/penalties/penalty-routes.js';
+import {
+  bookingRoutes,
+  type BookingRoutesDependencies,
+} from './modules/bookings/booking-routes.js';
+import {
+  bookingConfigRoutes,
+  type BookingConfigRoutesDependencies,
+} from './modules/bookings/booking-config-routes.js';
+import { exportRoutes, type ExportRoutesDependencies } from './modules/bookings/export-routes.js';
 import { authRoutes } from './modules/auth/auth-routes.js';
 import { tenantRoutes } from './modules/tenants/tenant-routes.js';
 import { organizationRoutes } from './modules/organization/organization-routes.js';
@@ -87,6 +96,9 @@ export interface AppDependencies {
   attendance?: AttendanceRoutesDependencies;
   workflows?: WorkflowRoutesDependencies;
   penalties?: PenaltyRoutesDependencies;
+  bookings?: BookingRoutesDependencies;
+  bookingConfig?: BookingConfigRoutesDependencies;
+  bookingExports?: ExportRoutesDependencies;
   metrics?: Metrics;
   readiness?: () => Promise<boolean>;
 }
@@ -292,6 +304,42 @@ export function createApp(deps: AppDependencies): Express {
       '/v1',
       penaltyRoutes({
         ...deps.penalties,
+        tokens: deps.tokens,
+        authRepo: deps.authRepo,
+        rbacRepo: deps.rbacRepo,
+        governance: deps.governance,
+      }),
+    );
+  }
+  if (deps.bookings) {
+    app.use(
+      '/v1',
+      bookingRoutes({
+        ...deps.bookings,
+        tokens: deps.tokens,
+        authRepo: deps.authRepo,
+        rbacRepo: deps.rbacRepo,
+        governance: deps.governance,
+      }),
+    );
+  }
+  if (deps.bookingConfig) {
+    app.use(
+      '/v1',
+      bookingConfigRoutes({
+        ...deps.bookingConfig,
+        tokens: deps.tokens,
+        authRepo: deps.authRepo,
+        rbacRepo: deps.rbacRepo,
+        governance: deps.governance,
+      }),
+    );
+  }
+  if (deps.bookingExports) {
+    app.use(
+      '/v1',
+      exportRoutes({
+        ...deps.bookingExports,
         tokens: deps.tokens,
         authRepo: deps.authRepo,
         rbacRepo: deps.rbacRepo,

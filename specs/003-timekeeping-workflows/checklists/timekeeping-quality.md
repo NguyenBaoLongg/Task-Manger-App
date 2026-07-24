@@ -12,14 +12,16 @@
 - [x] CHK002 Are tenant-wide and branch-scoped company OFF/holiday calendar requirements complete enough to suppress check-in, daily KPI report obligation and attendance penalties without counting as personal leave? [Completeness, Spec §FR-048, Spec §SC-008]
 - [x] CHK003 Are video policy acknowledgement, video check-in media lifecycle, manual video review and missing check-in violation requirements all documented without relying on AI scoring? [Completeness, Spec §FR-007–FR-013]
 - [x] CHK004 Are late-arrival rules complete for minute rounding, first-late monthly exemption, 1–15/16–89/90+ penalty tiers, late notice discount and no-notice surcharge? [Completeness, Spec §FR-014–FR-022]
-- [x] CHK005 Are after-15:00 worked-late and after-18:00 non-worked/no-report classifications fully specified for attendance, KPI reporting and penalties? [Completeness, Spec §FR-016–FR-017]
+- [x] CHK005 Are the 12:00 missing-check-in cutoff, after-15:00 worked-late and post-cutoff non-worked/no-report classifications fully specified for attendance, KPI reporting and penalties? [Completeness, Spec §FR-012, Spec §FR-016–FR-017]
+- [x] CHK005A Is the 15-minute pre-shift check-in reminder specified with tenant/branch scope, mention payload, OFF/leave exclusion and retry-safe dedupe? [Completeness, Spec §FR-050]
+- [x] CHK005B Is the 11:00 final pre-noon check-in warning specified with tenant/branch scope, mention payload, OFF/leave exclusion, retry-safe dedupe and 12:00 non-worked/penalty consequence? [Completeness, Spec §FR-051]
 - [x] CHK006 Are leave and sudden-leave requirements complete for full-day, morning half-day, multi-day ranges, evidence, approval, conflicts, consecutive-day exceptions and monthly over-5-day notification? [Completeness, Spec §FR-035–FR-042, Spec §FR-049]
 - [x] CHK007 Are penalty requirements complete for separate violations, settlement projection, adjustments, payment states, monthly summary and the explicit exclusion of payroll/payment-gateway dependency? [Completeness, Spec §FR-024–FR-028]
 - [x] CHK008 Are Module 3 approval workflow requirements complete for supported request types, one-level, sequential multi-level, parallel approvals, decision state, notifications and final effects? [Completeness, Spec §FR-029–FR-034]
 
 ## Requirement Clarity
 
-- [x] CHK009 Is "end of tenant business day" for missing check-in closure defined with enough precision to avoid ambiguous day-close timing across tenant timezones? [Clarity, Spec §FR-012, Research: missing check-in closes at end of tenant business day]
+- [x] CHK009 Is the 12:00 tenant-local cutoff for missing check-in closure defined with enough precision to avoid ambiguous timezone behavior? [Clarity, Spec §FR-012, Research: missing check-in closes at 12:00 tenant-local cutoff]
 - [x] CHK010 Is the late penalty formula for the 16–89 minute tier stated consistently as `2.000 VND × minutes over 15`, including boundary behavior at 15, 16, 89 and 90 minutes? [Clarity, Spec §FR-019, Spec §SC-006]
 - [x] CHK011 Is "final late base penalty" clear enough to determine whether the first-late exemption, approved 50% reduction and no-notice surcharge are applied before or after settlement? [Clarity, Spec §FR-020–FR-024]
 - [x] CHK012 Are "clear notice in the shared channel" and "late notice sent at least 30 minutes before shift" defined with enough source/evidence criteria for approval and audit decisions? [Clarity, Spec §FR-020, Spec §FR-037]
@@ -51,7 +53,7 @@
 - [x] CHK029 Are media failure, conversion retry, tombstone and legal-hold edge cases addressed at the requirement level rather than left to implementation assumptions? [Coverage, Edge Cases, Spec §CR-004]
 - [x] CHK030 Are leave conflict scenarios covered for same branch + same department/position, different branch allowed, and multi-assignment employees? [Coverage, Spec §FR-040–FR-041]
 - [x] CHK031 Are sudden-leave scenarios covered where no notice and second sudden leave in the month create independent violations instead of being merged? [Coverage, Spec §FR-037–FR-038]
-- [x] CHK032 Are KPI-report eligibility scenarios covered for on-time, late, after-15:00 check-in, after-18:00 no-check-in, approved leave and company OFF days? [Coverage, Spec §FR-016–FR-017, Spec §FR-044–FR-048]
+- [x] CHK032 Are KPI-report eligibility scenarios covered for on-time, late, after-15:00 check-in, no-check-in by the 12:00 cutoff, approved leave and company OFF days? [Coverage, Spec §FR-012, Spec §FR-016–FR-017, Spec §FR-044–FR-048]
 
 ## Non-Functional Requirements
 

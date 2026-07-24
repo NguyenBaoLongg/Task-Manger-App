@@ -8,7 +8,7 @@ import {
   systemClock,
   type Clock,
 } from '@adsup/domain';
-import type { AttendanceRepository } from '@adsup/database';
+import type { AttendanceRepository, PenaltyRepository } from '@adsup/database';
 
 const dateOnly = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
@@ -16,6 +16,7 @@ export class AttendanceService {
   constructor(
     private readonly repository: AttendanceRepository,
     private readonly clock: Clock = systemClock,
+    private readonly penalties?: PenaltyRepository,
   ) {}
 
   createVideoPolicyVersion(input: {
@@ -152,7 +153,7 @@ export class AttendanceService {
       );
       if (penaltyPolicy) {
         const flags = localTimeFlags(checkInAt, shift.timezone);
-        await this.repository.createLateOccurrence({
+        const occurrence = await this.repository.createLateOccurrence({
           tenantId: input.tenantId,
           attendanceEventId: event.id,
           membershipId: input.actorMembershipId,
@@ -169,6 +170,11 @@ export class AttendanceService {
             classification: classification.classification,
           }),
           policyVersionId: penaltyPolicy.id,
+        });
+        await this.penalties?.assessLateOccurrence({
+          tenantId: input.tenantId,
+          lateOccurrenceId: occurrence.id,
+          correlationId: input.correlationId,
         });
       }
     }

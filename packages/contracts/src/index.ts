@@ -14,6 +14,10 @@ export const timekeepingOpenApiPath = fileURLToPath(
   new URL('../../../specs/003-timekeeping-workflows/contracts/openapi.yaml', import.meta.url),
 );
 
+export const bookingOpenApiPath = fileURLToPath(
+  new URL('../../../specs/004-booking-export/contracts/openapi.yaml', import.meta.url),
+);
+
 export async function loadOpenApiDocument(): Promise<Record<string, unknown>> {
   const source = await readFile(openApiPath, 'utf8');
   return YAML.parse(source) as Record<string, unknown>;
@@ -29,8 +33,14 @@ export async function loadTimekeepingOpenApiDocument(): Promise<Record<string, u
   return YAML.parse(source) as Record<string, unknown>;
 }
 
+export async function loadBookingOpenApiDocument(): Promise<Record<string, unknown>> {
+  const source = await readFile(bookingOpenApiPath, 'utf8');
+  return YAML.parse(source) as Record<string, unknown>;
+}
+
 export * from './kpi.js';
 export * from './attendance.js';
+export * from './booking.js';
 
 export const problemCodes = [
   'AUTHENTICATION_REQUIRED',

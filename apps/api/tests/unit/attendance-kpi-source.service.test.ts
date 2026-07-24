@@ -37,11 +37,11 @@ describe('attendance KPI source adapter', () => {
       sourceType: 'ATTENDANCE',
       sourceId: 'event-1',
       value: '100',
-      unit: 'percent',
+      unit: 'PERCENT',
     });
   });
 
-  it('returns 0 for confirmed late attendance and null when source is missing', async () => {
+  it('returns 0 for confirmed late attendance, null when source is missing, and digests attendance context', async () => {
     const late = new KpiSourceService(
       {
         async read() {
@@ -54,11 +54,37 @@ describe('attendance KPI source adapter', () => {
             sourceAttendanceEventId: 'event-2',
             observedAt: new Date('2026-07-21T03:00:00Z'),
             value: '0',
+            dayClassification: 'WORKED_LATE',
+            scheduleVersionId: 'schedule-v1',
+            policyVersionId: 'policy-v1',
           };
         },
       },
     );
-    await expect(late.read(query as never)).resolves.toMatchObject({ value: '0' });
+    const first = await late.read(query as never);
+    expect(first).toMatchObject({ value: '0', unit: 'PERCENT' });
+
+    const changedPolicy = new KpiSourceService(
+      {
+        async read() {
+          return null;
+        },
+      },
+      {
+        async readAttendanceOnTime() {
+          return {
+            sourceAttendanceEventId: 'event-2',
+            observedAt: new Date('2026-07-21T03:00:00Z'),
+            value: '0',
+            dayClassification: 'WORKED_LATE',
+            scheduleVersionId: 'schedule-v1',
+            policyVersionId: 'policy-v2',
+          };
+        },
+      },
+    );
+    const second = await changedPolicy.read(query as never);
+    expect(second?.inputDigest).not.toBe(first?.inputDigest);
 
     const missing = new KpiSourceService(
       {

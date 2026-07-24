@@ -4,6 +4,7 @@ dist-tests/
 build/
 coverage/
 .cache/
+graphify-out/
 .env
 .env.*
 !.env.example

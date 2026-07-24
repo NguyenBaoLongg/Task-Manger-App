@@ -2,9 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { ProblemError } from '../foundation.js';
 import type { ApprovalDecision, ApprovalStepMode, RequestStatus } from './types.js';
 
+export type WorkflowApproverRule =
+  'DIRECT_MANAGER' | 'TENANT_OWNER' | 'ROLE_PERMISSION' | 'EXPLICIT_MEMBERS';
+
 export interface WorkflowStepTemplate {
   mode: ApprovalStepMode;
+  approverRule?: WorkflowApproverRule;
   requiredApprovalCount: number;
+  permissionCode?: string;
+  memberIds?: string[];
 }
 
 export interface WorkflowRunStep {

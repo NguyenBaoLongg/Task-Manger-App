@@ -1,5 +1,6 @@
-import type { DatabaseClient } from './client.js';
+import { runInTransaction, type DatabaseExecutor, type DatabaseTransaction } from './client.js';
 import type { Prisma } from './generated/prisma/client.js';
+import { businessMonthBounds } from '@adsup/domain';
 
 export interface AttendancePageInput {
   tenantId: string;
@@ -8,7 +9,11 @@ export interface AttendancePageInput {
 }
 
 export class AttendanceRepository {
-  constructor(private readonly db: DatabaseClient) {}
+  constructor(private readonly db: DatabaseExecutor) {}
+
+  inTransaction(transaction: DatabaseTransaction) {
+    return new AttendanceRepository(transaction);
+  }
 
   listShifts(input: AttendancePageInput) {
     return this.db.shiftDefinition.findMany({
@@ -60,6 +65,7 @@ export class AttendanceRepository {
     businessDate: Date;
     shiftDefinitionId: string | null;
     state: 'SCHEDULED' | 'OFF' | 'LEAVE_APPROVED' | 'ADJUSTED' | 'CANCELLED';
+    leaveDurationKind?: 'FULL_DAY' | 'MORNING_HALF' | 'DATE_RANGE' | null;
     changeKind:
       'SELF_EDIT' | 'CHANGE_REQUEST' | 'MANAGER_ADJUSTMENT' | 'OFF_CALENDAR' | 'LEAVE_APPROVAL';
     sourceRequestId?: string | null;
@@ -69,7 +75,7 @@ export class AttendanceRepository {
     reason: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const previous = await tx.workScheduleVersion.findFirst({
         where: {
           tenantId: input.tenantId,
@@ -93,6 +99,7 @@ export class AttendanceRepository {
           businessDate: input.businessDate,
           shiftDefinitionId: input.shiftDefinitionId,
           state: input.state,
+          leaveDurationKind: input.leaveDurationKind,
           changeKind: input.changeKind,
           sourceRequestId: input.sourceRequestId,
           sourceOffCalendarId: input.sourceOffCalendarId,
@@ -179,7 +186,7 @@ export class AttendanceRepository {
     reason: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const latest = await tx.companyOffCalendarVersion.findFirst({
         where: {
           tenantId: input.tenantId,
@@ -249,7 +256,7 @@ export class AttendanceRepository {
         endDate: { gte: input.businessDate },
         OR: [{ scopeType: 'TENANT' }, { scopeType: 'BRANCH', branchId: input.branchId }],
       },
-      orderBy: [{ scopeType: 'asc' }, { versionNumber: 'desc' }, { id: 'desc' }],
+      orderBy: [{ scopeType: 'desc' }, { versionNumber: 'desc' }, { id: 'desc' }],
     });
   }
 
@@ -261,7 +268,7 @@ export class AttendanceRepository {
         OR: [{ effectiveToDate: null }, { effectiveToDate: { gte: businessDate } }],
         AND: [{ OR: [{ scopeType: 'TENANT' }, { scopeType: 'BRANCH', branchId }] }],
       },
-      orderBy: [{ scopeType: 'asc' }, { versionNumber: 'desc' }, { id: 'desc' }],
+      orderBy: [{ scopeType: 'desc' }, { versionNumber: 'desc' }, { id: 'desc' }],
     });
   }
 
@@ -287,7 +294,7 @@ export class AttendanceRepository {
     reason: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const latest = await tx.videoPolicyVersion.findFirst({
         where: {
           tenantId: input.tenantId,
@@ -364,7 +371,7 @@ export class AttendanceRepository {
     action: 'ACKNOWLEDGED';
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const acknowledgement = await tx.videoPolicyAcknowledgement.upsert({
         where: {
           tenantId_membershipId_policyVersionId: {
@@ -388,6 +395,21 @@ export class AttendanceRepository {
           afterRedacted: { policyVersionId: input.policyVersionId },
         },
       });
+      await tx.outboxEvent.create({
+        data: {
+          tenantId: input.tenantId,
+          aggregateType: 'VIDEO_POLICY_ACKNOWLEDGEMENT',
+          aggregateId: acknowledgement.id,
+          eventType: 'attendance.video-policy.acknowledged',
+          dedupeKey: `attendance-video-policy-acknowledged:${acknowledgement.id}`,
+          payloadRedacted: {
+            acknowledgementId: acknowledgement.id,
+            policyVersionId: input.policyVersionId,
+            membershipId: input.membershipId,
+          },
+          correlationId: input.correlationId,
+        },
+      });
       return acknowledgement;
     });
   }
@@ -408,7 +430,7 @@ export class AttendanceRepository {
         OR: [{ effectiveToDate: null }, { effectiveToDate: { gte: businessDate } }],
         AND: [{ OR: [{ scopeType: 'TENANT' }, { scopeType: 'BRANCH', branchId }] }],
       },
-      orderBy: [{ scopeType: 'asc' }, { versionNumber: 'desc' }, { id: 'desc' }],
+      orderBy: [{ scopeType: 'desc' }, { versionNumber: 'desc' }, { id: 'desc' }],
     });
   }
 
@@ -435,7 +457,7 @@ export class AttendanceRepository {
     originalChecksum: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const event = await tx.attendanceEvent.create({
         data: {
           tenantId: input.tenantId,
@@ -451,7 +473,7 @@ export class AttendanceRepository {
           correlationId: input.correlationId,
         },
       });
-      await tx.checkInVideoAsset.create({
+      const videoAsset = await tx.checkInVideoAsset.create({
         data: {
           tenantId: input.tenantId,
           attendanceEventId: event.id,
@@ -484,7 +506,7 @@ export class AttendanceRepository {
           tenantId: input.tenantId,
           aggregateType: 'ATTENDANCE_EVENT',
           aggregateId: event.id,
-          eventType: 'attendance.check-in.created',
+          eventType: 'attendance.checkin.recorded',
           dedupeKey: `attendance-check-in:${event.id}`,
           payloadRedacted: {
             attendanceEventId: event.id,
@@ -492,6 +514,22 @@ export class AttendanceRepository {
             branchId: event.branchId,
             businessDate: event.businessDate.toISOString().slice(0, 10),
             dayClassification: event.dayClassification,
+          },
+          correlationId: input.correlationId,
+        },
+      });
+      await tx.outboxEvent.create({
+        data: {
+          tenantId: input.tenantId,
+          aggregateType: 'CHECKIN_VIDEO_ASSET',
+          aggregateId: videoAsset.id,
+          eventType: 'attendance.video.conversion-requested',
+          dedupeKey: `attendance-video-conversion-requested:${videoAsset.id}`,
+          payloadRedacted: {
+            videoAssetId: videoAsset.id,
+            attendanceEventId: event.id,
+            membershipId: event.membershipId,
+            branchId: event.branchId,
           },
           correlationId: input.correlationId,
         },
@@ -515,16 +553,24 @@ export class AttendanceRepository {
     queueImpactFlag: boolean;
     policyVersionId: string;
   }) {
-    const yearMonth = input.businessDate.toISOString().slice(0, 7);
-    return this.db.$transaction(async (tx) => {
+    const month = businessMonthBounds(input.businessDate);
+    return runInTransaction(this.db, async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(
+            ${`attendance-late:${input.tenantId}:${input.membershipId}:${month.yearMonth}`},
+            0
+          )
+        )
+      `;
       const monthlyLateSequence =
         (await tx.lateOccurrence.count({
           where: {
             tenantId: input.tenantId,
             membershipId: input.membershipId,
             businessDate: {
-              gte: new Date(`${yearMonth}-01T00:00:00.000Z`),
-              lt: new Date(`${yearMonth}-31T00:00:00.000Z`),
+              gte: month.start,
+              lt: month.end,
             },
           },
         })) + 1;
@@ -538,6 +584,173 @@ export class AttendanceRepository {
     });
   }
 
+  async markApprovedLateNotice(input: {
+    tenantId: string;
+    requestId: string;
+    membershipId: string;
+    businessDate: Date;
+    correlationId: string;
+  }) {
+    return runInTransaction(this.db, async (tx) => {
+      const occurrences = await tx.lateOccurrence.findMany({
+        where: {
+          tenantId: input.tenantId,
+          membershipId: input.membershipId,
+          businessDate: input.businessDate,
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+      for (const occurrence of occurrences) {
+        if (occurrence.lateNoticeRequestId === input.requestId) continue;
+        await tx.lateOccurrence.update({
+          where: { tenantId_id: { tenantId: input.tenantId, id: occurrence.id } },
+          data: { lateNoticeRequestId: input.requestId },
+        });
+      }
+      if (occurrences.length) {
+        await tx.auditEvent.create({
+          data: {
+            tenantId: input.tenantId,
+            correlationId: input.correlationId,
+            eventType: 'LATE_NOTICE_APPROVED_LINKED',
+            targetType: 'APPROVAL_REQUEST',
+            targetId: input.requestId,
+            reason: 'APPROVED_LATE_NOTICE_FINAL_EFFECT',
+            afterRedacted: {
+              businessDate: input.businessDate.toISOString().slice(0, 10),
+              membershipId: input.membershipId,
+              linkedOccurrences: occurrences.length,
+            },
+          },
+        });
+      }
+      return occurrences;
+    });
+  }
+
+  async listDayCloseCandidates(input: {
+    tenantId: string;
+    businessDate: Date;
+    branchId?: string;
+    take?: number;
+  }) {
+    const schedules = await this.db.workScheduleVersion.findMany({
+      where: {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        businessDate: input.businessDate,
+        supersededAt: null,
+        state: { in: ['SCHEDULED', 'ADJUSTED'] },
+        shiftDefinitionId: { not: null },
+      },
+      orderBy: [{ branchId: 'asc' }, { membershipId: 'asc' }, { id: 'asc' }],
+      take: Math.min(Math.max(input.take ?? 500, 1), 1000),
+    });
+    if (!schedules.length) return [];
+    const existing = await this.db.attendanceEvent.findMany({
+      where: {
+        tenantId: input.tenantId,
+        businessDate: input.businessDate,
+        membershipId: { in: schedules.map((schedule) => schedule.membershipId) },
+      },
+      select: { membershipId: true },
+    });
+    const membershipsWithAttendance = new Set(existing.map((event) => event.membershipId));
+    return schedules
+      .filter((schedule) => !membershipsWithAttendance.has(schedule.membershipId))
+      .map((schedule) => ({
+        tenantId: schedule.tenantId,
+        membershipId: schedule.membershipId,
+        branchId: schedule.branchId,
+        businessDate: schedule.businessDate,
+        scheduleVersionId: schedule.id,
+        shiftDefinitionId: schedule.shiftDefinitionId!,
+      }));
+  }
+
+  async createMissingCheckInEvent(input: {
+    tenantId: string;
+    membershipId: string;
+    branchId: string;
+    businessDate: Date;
+    scheduleVersionId: string;
+    correlationId: string;
+  }) {
+    const policy = await this.getEffectiveVideoPolicy(
+      input.tenantId,
+      input.branchId,
+      input.businessDate,
+    );
+    if (!policy) return null;
+    return runInTransaction(this.db, async (tx) => {
+      const event = await tx.attendanceEvent.upsert({
+        where: {
+          tenantId_membershipId_businessDate: {
+            tenantId: input.tenantId,
+            membershipId: input.membershipId,
+            businessDate: input.businessDate,
+          },
+        },
+        update: {},
+        create: {
+          tenantId: input.tenantId,
+          membershipId: input.membershipId,
+          branchId: input.branchId,
+          businessDate: input.businessDate,
+          scheduleVersionId: input.scheduleVersionId,
+          videoPolicyVersionId: policy.id,
+          checkInAt: null,
+          state: 'MISSING_CHECK_IN',
+          dayClassification: 'NON_WORKED_NO_CHECKIN',
+          classificationReason: 'NO_CHECKIN_AFTER_12_LOCAL',
+          correlationId: input.correlationId,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          tenantId: input.tenantId,
+          correlationId: input.correlationId,
+          eventType: 'ATTENDANCE_DAY_CLOSED_MISSING_CHECKIN',
+          targetType: 'ATTENDANCE_EVENT',
+          targetId: event.id,
+          reason: 'NO_CHECKIN_AFTER_12_LOCAL',
+          afterRedacted: {
+            attendanceEventId: event.id,
+            membershipId: event.membershipId,
+            branchId: event.branchId,
+            businessDate: event.businessDate.toISOString().slice(0, 10),
+          },
+        },
+      });
+      await tx.outboxEvent.upsert({
+        where: {
+          tenantId_dedupeKey: {
+            tenantId: input.tenantId,
+            dedupeKey: `attendance-day-closed:${event.id}`,
+          },
+        },
+        update: {},
+        create: {
+          tenantId: input.tenantId,
+          aggregateType: 'ATTENDANCE_EVENT',
+          aggregateId: event.id,
+          eventType: 'attendance.day.closed',
+          dedupeKey: `attendance-day-closed:${event.id}`,
+          payloadRedacted: {
+            attendanceEventId: event.id,
+            membershipId: event.membershipId,
+            branchId: event.branchId,
+            businessDate: event.businessDate.toISOString().slice(0, 10),
+            state: event.state,
+            dayClassification: event.dayClassification,
+          },
+          correlationId: input.correlationId,
+        },
+      });
+      return event;
+    });
+  }
+
   createVideoReviewResult(input: {
     tenantId: string;
     attendanceEventId: string;
@@ -547,7 +760,7 @@ export class AttendanceRepository {
     failedCriteria: string[];
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const review = await tx.videoReviewResult.create({
         data: {
           tenantId: input.tenantId,
@@ -571,6 +784,58 @@ export class AttendanceRepository {
             attendanceEventId: review.attendanceEventId,
             reviewStatus: review.reviewStatus,
           },
+        },
+      });
+      if (input.reviewStatus === 'PASSED' || input.reviewStatus === 'WAIVED') {
+        await tx.attendanceEvent.update({
+          where: { tenantId_id: { tenantId: input.tenantId, id: input.attendanceEventId } },
+          data: { state: 'CONFIRMED' },
+        });
+      }
+      const videoAsset = await tx.checkInVideoAsset.findUnique({
+        where: {
+          tenantId_attendanceEventId: {
+            tenantId: input.tenantId,
+            attendanceEventId: input.attendanceEventId,
+          },
+        },
+      });
+      if (videoAsset) {
+        await tx.actionItem.updateMany({
+          where: {
+            tenantId: input.tenantId,
+            sourceType: 'ATTENDANCE_VIDEO_REVIEW',
+            sourceId: videoAsset.id,
+            state: { in: ['OPEN', 'OVERDUE'] },
+          },
+          data: {
+            state: 'COMPLETED',
+            completedAt: new Date(),
+            sourceFreshnessAt: new Date(),
+            stateVersion: { increment: 1 },
+          },
+        });
+      }
+      await tx.outboxEvent.upsert({
+        where: {
+          tenantId_dedupeKey: {
+            tenantId: input.tenantId,
+            dedupeKey: `attendance-video-reviewed:${review.id}`,
+          },
+        },
+        update: {},
+        create: {
+          tenantId: input.tenantId,
+          aggregateType: 'VIDEO_REVIEW_RESULT',
+          aggregateId: review.id,
+          eventType: 'attendance.video.reviewed',
+          dedupeKey: `attendance-video-reviewed:${review.id}`,
+          payloadRedacted: {
+            reviewId: review.id,
+            attendanceEventId: review.attendanceEventId,
+            reviewStatus: review.reviewStatus,
+          },
+          correlationId: input.correlationId,
         },
       });
       return review;
@@ -606,9 +871,12 @@ export class AttendanceRepository {
       where: {
         tenantId: input.tenantId,
         membershipId: input.membershipId,
-        state: 'LEAVE_APPROVED',
+        OR: [{ state: 'LEAVE_APPROVED' }, { leaveDurationKind: 'MORNING_HALF' }],
         supersededAt: null,
-        businessDate: { gte: input.dateFrom, lte: input.dateTo },
+        businessDate: {
+          gte: input.dateFrom,
+          lt: new Date(input.dateTo.getTime() + 86_400_000),
+        },
       },
       select: { businessDate: true },
       orderBy: { businessDate: 'asc' },
@@ -633,7 +901,7 @@ export class AttendanceRepository {
         requestedByMembershipId: input.excludeMembershipId
           ? { not: input.excludeMembershipId }
           : undefined,
-        businessDate: { gte: input.dateFrom, lte: input.dateTo },
+        businessDate: { lt: new Date(input.dateTo.getTime() + 86_400_000) },
       },
       orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
     });
@@ -706,6 +974,9 @@ export class AttendanceRepository {
         sourceAttendanceEventId: event.id,
         observedAt: event.checkInAt ?? event.serverRecordedAt,
         value: '100' as const,
+        dayClassification: event.dayClassification,
+        scheduleVersionId: event.scheduleVersionId,
+        policyVersionId: event.videoPolicyVersionId,
       };
     }
     if (event.dayClassification === 'WORKED_LATE') {
@@ -713,6 +984,9 @@ export class AttendanceRepository {
         sourceAttendanceEventId: event.id,
         observedAt: event.checkInAt ?? event.serverRecordedAt,
         value: '0' as const,
+        dayClassification: event.dayClassification,
+        scheduleVersionId: event.scheduleVersionId,
+        policyVersionId: event.videoPolicyVersionId,
       };
     }
     return null;

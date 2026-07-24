@@ -20,9 +20,20 @@ export function calculateLate(shiftStartAt: Date, checkInAt: Date) {
   };
 }
 
+export function businessMonthBounds(businessDate: Date) {
+  const year = businessDate.getUTCFullYear();
+  const month = businessDate.getUTCMonth();
+  return {
+    start: new Date(Date.UTC(year, month, 1)),
+    end: new Date(Date.UTC(year, month + 1, 1)),
+    yearMonth: `${year}-${String(month + 1).padStart(2, '0')}`,
+  };
+}
+
 export function localTimeFlags(value: Date, timezone: string) {
   const minutes = localMinutes(value, timezone);
   return {
+    after12Local: minutes >= 12 * 60,
     after15Local: minutes >= 15 * 60,
     after18Local: minutes >= 18 * 60,
   };
@@ -42,17 +53,17 @@ export function classifyAttendanceDay(input: {
       : { classification: 'WORKED_ON_TIME', state: 'CONFIRMED', reason: 'CHECKED_IN_ON_TIME' };
   }
   const now = input.now ?? new Date();
-  if (localTimeFlags(now, input.timezone).after18Local) {
+  if (localTimeFlags(now, input.timezone).after12Local) {
     return {
       classification: 'NON_WORKED_NO_CHECKIN',
       state: 'NON_WORKED',
-      reason: 'NO_CHECKIN_AFTER_18_LOCAL',
+      reason: 'NO_CHECKIN_AFTER_12_LOCAL',
     };
   }
   return {
     classification: 'NON_WORKED_NO_CHECKIN',
     state: 'MISSING_CHECK_IN',
-    reason: 'NO_CHECKIN_BEFORE_DAY_CLOSE',
+    reason: 'NO_CHECKIN_BEFORE_12_LOCAL',
   };
 }
 

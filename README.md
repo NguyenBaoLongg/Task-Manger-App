@@ -19,3 +19,16 @@ corepack pnpm dev:api
 Các quality gate: `format:check`, `lint`, `typecheck`, `test`, `test:contract`,
 `test:integration`, `test:migration`, `build`, `load:smoke`. Xem acceptance path tại
 `specs/001-multitenant-foundation/quickstart.md` và kiến trúc trong `docs/architecture/`.
+
+## Graphify
+
+Graphify được cài project-local để tạo knowledge graph tra cứu cấu trúc app.
+
+```powershell
+& .\.tools\setup-graphify.ps1
+corepack pnpm graphify:build
+corepack pnpm graphify -- god-nodes --top 10
+```
+
+File sinh ra nằm trong `graphify-out/` và đã được Git ignore. Mở
+`graphify-out/graph.html` hoặc `graphify-out/GRAPH_TREE.html` bằng trình duyệt để xem cấu trúc.

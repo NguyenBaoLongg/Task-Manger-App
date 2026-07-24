@@ -27,6 +27,9 @@ function penaltyDependencies(overrides: Partial<AppDependencies> = {}) {
             pageInfo: { nextCursor: null },
           };
         },
+        async getSettlement() {
+          return { membershipId: uuid, branchId: uuid };
+        },
         async transitionPayment() {
           return {
             id: uuid,
@@ -89,5 +92,71 @@ describe('attendance penalties contract', () => {
       .send({ toStatus: 'SUBMITTED', amountMinor: 150000, reason: 'Paid', paymentGateway: 'x' });
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('allows employee self-listing and own payment-proof submission without manager permission', async () => {
+    const listInputs: Record<string, unknown>[] = [];
+    const transitionInputs: Record<string, unknown>[] = [];
+    const app = createApp(
+      penaltyDependencies({
+        penalties: {
+          penaltyService: {
+            async createPolicyVersion() {
+              return {};
+            },
+            async listSettlements(input: Record<string, unknown>) {
+              listInputs.push(input);
+              return { items: [], pageInfo: { nextCursor: null } };
+            },
+            async getSettlement() {
+              return { membershipId: uuid, branchId: uuid };
+            },
+            async transitionPayment(input: Record<string, unknown>) {
+              transitionInputs.push(input);
+              return { id: uuid, status: 'SUBMITTED' };
+            },
+          },
+        } as unknown as AppDependencies['penalties'],
+        rbacRepo: {
+          async hasPermission(_tenantId: string, _membershipId: string, permission: string) {
+            return permission === 'attendance.penalty.self';
+          },
+          async hasAnyPermission() {
+            return false;
+          },
+        } as never,
+      }),
+    );
+
+    const listed = await send(
+      app,
+      'get',
+      `/v1/tenants/${uuid}/attendance/penalty-settlements?yearMonth=2026-07`,
+    ).set('Authorization', 'Bearer test-token');
+    expect(listed.status).toBe(200);
+    expect(listInputs[0]).toMatchObject({
+      actorMembershipId: uuid,
+      canManage: false,
+    });
+
+    const submitted = await send(
+      app,
+      'post',
+      `/v1/tenants/${uuid}/attendance/penalty-settlements/${uuid}/payment-transitions`,
+    )
+      .set('Authorization', 'Bearer test-token')
+      .set('idempotency-key', 'employee-proof')
+      .send({
+        toStatus: 'SUBMITTED',
+        amountMinor: 50000,
+        mediaObjectId: uuid,
+        reason: 'Da nop tien',
+      });
+    expect(submitted.status).toBe(200);
+    expect(transitionInputs[0]).toMatchObject({
+      actorMembershipId: uuid,
+      canManage: false,
+      mediaObjectId: uuid,
+    });
   });
 });

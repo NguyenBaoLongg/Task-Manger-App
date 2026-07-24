@@ -29,5 +29,9 @@ export interface KpiNotificationEffectPort {
     membershipId: UUID;
     eventId: UUID;
     type: string;
+    dedupeKey?: string;
+    title?: string;
+    body?: string;
+    data?: Record<string, string>;
   }): Promise<void>;
 }

@@ -70,18 +70,21 @@ tenant mẫu có 30 membership, 3 cơ sở và hai ca 08:30/09:30
    create workflow/audit history.
 3. Check-in records snapshot effective schedule, assignment branch, tenant timezone, timestamp server,
    video policy version and media ID. Video conversion runs only in worker; API never waits for conversion.
-4. Attendance evaluation workers close a business day by tenant timezone: missing check-in is evaluated
-   at end of day, after-15:00 check-in remains a worked day and report-eligible, and no check-in after
-   18:00 is marked non-worked for KPI reporting while still producing applicable absence/check-in violations.
-5. Penalty settlement stores individual violations and one explainable settlement projection. The
+4. Attendance reminder workers run 15 minutes before each tenant-local shift start and again at the final
+   pre-cutoff reminder time, default 11:00 for the 12:00 cutoff, then emit deduped bot notification payloads
+   tagging scheduled members who have not checked in, excluding OFF/approved leave.
+5. Attendance evaluation workers evaluate missing check-in at the 12:00 tenant-local cutoff: after-15:00
+   check-in remains a worked day and report-eligible, and no check-in or approved correction after the cutoff
+   is marked non-worked for KPI reporting while still producing applicable absence/check-in violations.
+6. Penalty settlement stores individual violations and one explainable settlement projection. The
    `MAX_OF_VIDEO_AND_LATE` rule suppresses the smaller base component but preserves both source violations.
    Payment and adjustments are append-only.
-6. Workflow definitions are versioned and limited to Module 3 request types. Approval runs lock the active
+7. Workflow definitions are versioned and limited to Module 3 request types. Approval runs lock the active
    step, enforce sequential/parallel completion rules, and apply final effects once in the same transaction
    as audit/outbox/action-item updates.
-7. Company OFF calendars are versioned by tenant or branch. OFF days suppress check-in, attendance KPI,
+8. Company OFF calendars are versioned by tenant or branch. OFF days suppress check-in, attendance KPI,
    daily KPI report requirement and attendance penalties, and do not count toward the monthly absence threshold.
-8. `ATTENDANCE_ON_TIME_RATE` implements the Module 2 source adapter using only confirmed attendance
+9. `ATTENDANCE_ON_TIME_RATE` implements the Module 2 source adapter using only confirmed attendance
    snapshots; it returns `null` for missing source and never exposes video/signed URL details.
 
 ## Project Structure
@@ -147,7 +150,7 @@ Các quyết định và phương án bị loại được ghi trong [research.m
 
 ## Verification Strategy
 
-- Unit: late minute rounding, 15:00/18:00 classification, first-late exemption, 16-89 excess-minute
+- Unit: late minute rounding, 12:00 missing-check-in cutoff, 15:00 worked-late classification, first-late exemption, 16-89 excess-minute
   penalty, settlement max rule, absence day counting, OFF-calendar resolution and approval state machine.
 - Contract: all Module 3 endpoints cover success, validation, authn/authz, idempotency replay/conflict,
   safe errors and scoped pagination.
@@ -156,7 +159,7 @@ Các quyết định và phương án bị loại được ghi trong [research.m
   summary notification and attendance KPI source.
 - Migration/seed: clean deploy and upgrade from Module 2 schema, composite tenant FKs, partial unique
   keys for active versions/runs and deterministic seed rerun counts.
-- Worker/load: video conversion retries, end-of-day missing check-in close, monthly absence summary,
+- Worker/load: 15-minute check-in reminder fan-out, 11:00 final no-check-in warning, video conversion retries, 12:00 missing-check-in close, monthly absence summary,
   outbox delivery, 100 concurrent approvals and 10.000 check-in/day smoke profile.
 - Gates: format, lint, typecheck, Prisma validate/generate/status, unit/contract/integration/migration,
   coverage, build, secret/log redaction scan and `speckit-converge`.

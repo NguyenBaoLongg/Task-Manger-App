@@ -18,8 +18,10 @@ approval workflow. Không implement cho tới khi spec/clarify/plan/tasks hoàn 
 - Q: MVP xử lý phạt 50.000 VND cho video/check-in thế nào khi hệ thống chưa tự đánh giá chất lượng video? → A: Ca đã lên lịch mà không có video check-in sau mốc chốt theo policy là lỗi không thực hiện check-in 50.000 VND; video không đúng tiêu chuẩn chỉ bị phạt khi người có quyền review thủ công, không dùng AI tự chấm trong MVP. Nghỉ đột xuất không báo, nghỉ quá giới hạn và nghỉ sai quy định là các violation riêng.
 - Q: Với đi muộn từ phút 16 đến dưới 90 phút, tiền phạt 2.000 VND/phút được tính theo tổng số phút muộn hay phần vượt quá 15 phút? → A: Tính 2.000 VND cho số phút vượt quá 15; 1-15 phút vẫn là nhóm phạt cố định 20.000 VND.
 - Q: Module 3 MVP có quản lý quỹ phép/số dư ngày phép không? → A: Chưa quản lý quỹ phép trong MVP; chỉ quản lý lịch nghỉ, nghỉ đột xuất, nghỉ trùng, nghỉ liên tiếp, ngoại lệ và phạt.
-- Q: Khi nào hệ thống chốt lỗi không thực hiện video check-in? → A: Cuối ngày theo múi giờ tenant. Nếu nhân viên có check-in trong ngày nhưng sau 15:00 thì vẫn coi là đi muộn và vẫn phải nộp báo cáo; nếu đến sau 18:00 không có check-in và không phải OFF/nghỉ hợp lệ thì ngày đó coi như không đi làm, không phải nộp báo cáo KPI nhưng vẫn được đánh giá theo policy vắng mặt/check-in.
+- Q: Khi nào hệ thống chốt lỗi không thực hiện video check-in? → A: Đến 12:00 trưa theo múi giờ tenant, nếu ngày đó có ca làm và không phải OFF/nghỉ hợp lệ mà chưa có video check-in thì hệ thống tạo lỗi không thực hiện check-in 50.000 VND theo policy. Nếu nhân viên check-in hoặc được quản lý xác nhận bổ sung sau 12:00, dữ liệu đó chỉ dùng để xác định có đi làm và tính đi muộn, không tự xóa lỗi không check-in trước 12:00. Check-in sau 15:00 vẫn coi là đi muộn và vẫn phải nộp báo cáo KPI; không có check-in hoặc correction được duyệt sau mốc 12:00 thì ngày đó coi như không đi làm cho nghĩa vụ báo cáo KPI nhưng vẫn được đánh giá theo policy vắng mặt/check-in.
 - Q: Ngưỡng nghỉ quá 5 ngày/tháng được tính thế nào? → A: Tính tổng lịch nghỉ/nghỉ đột xuất đã duyệt trong tháng; nghỉ buổi sáng tính 0,5 ngày, không tính lịch OFF/ngày lễ Tết do quản lý set. Khi vượt 5 ngày, hệ thống nhắc quản lý và đánh dấu nhân viên nghỉ quá hạn trong tháng.
+- Q: Bot nhắc check-in trước ca hoạt động thế nào? → A: Trước giờ bắt đầu mỗi ca 15 phút theo múi giờ tenant, worker tìm nhân viên có lịch ca đó nhưng chưa check-in, không OFF/nghỉ hợp lệ, rồi phát một thông báo tenant/branch-scoped tag tên những người còn thiếu check-in. Reminder phải có dedupe key theo tenant, cơ sở, ngày, ca và lead time để retry không gửi trùng.
+- Q: Bot có cảnh báo lần cuối trước mốc phạt thiếu check-in không? → A: Có. Khoảng một tiếng trước mốc 12:00, mặc định 11:00 theo múi giờ tenant, worker gửi cảnh báo check-in lần cuối cho nhân viên có lịch làm trong ngày nhưng vẫn chưa check-in video. Nếu đến 12:00 vẫn không có check-in và không phải OFF/nghỉ hợp lệ thì mặc định ngày đó bị xem là không làm, đồng thời tạo lỗi không check-in/phạt theo policy; correction hoặc check-in rất muộn chỉ có thể chứng minh có làm nếu được quy trình hợp lệ chấp nhận và không tự xóa lỗi trước 12:00.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -73,15 +75,22 @@ kết quả là 0.
    chờ/đã duyệt video.
 3. **Given** check-in sau giờ bắt đầu ca, **When** hệ thống tính đi muộn, **Then** số phút được làm
    tròn xuống theo giây đã qua và lưu cả chênh lệch giây lẫn phút đã tính.
-4. **Given** ca đã lên lịch không có video check-in đến cuối ngày theo múi giờ tenant, **When** hệ
+4. **Given** ca đã lên lịch không có video check-in đến 12:00 trưa theo múi giờ tenant, **When** hệ
    thống đánh giá attendance, **Then** hệ thống tạo lỗi không thực hiện check-in 50.000 VND theo
-   policy nếu ngày đó không phải OFF hoặc nghỉ hợp lệ.
+   policy nếu ngày đó không phải OFF hoặc nghỉ hợp lệ; check-in/correction sau mốc này không tự xóa lỗi.
 5. **Given** video có thể không đạt tiêu chuẩn hình ảnh, **When** người có quyền review thủ công,
    **Then** hệ thống chỉ tạo violation nếu reviewer kết luận không đạt; MVP không dùng AI để tự kết
    luận tác phong, đồng phục, trang điểm, đầu tóc, giày dép hoặc bối cảnh.
 6. **Given** nhân viên check-in sau 15:00 trong ngày làm việc, **When** hệ thống đánh giá attendance,
    **Then** ngày đó vẫn được coi là có đi làm, bị tính đi muộn theo policy và vẫn thuộc diện phải nộp
    báo cáo KPI hằng ngày.
+7. **Given** ca 08:30 còn 15 phút nữa bắt đầu và có nhân viên trong ca chưa check-in, **When** worker reminder
+   chạy, **Then** bot phát một thông báo tenant/branch-scoped tag tên các nhân viên chưa check-in, bỏ qua người
+   đã check-in hoặc đã OFF/nghỉ hợp lệ và retry không tạo thông báo trùng.
+8. **Given** đã đến 11:00 theo múi giờ tenant và vẫn có nhân viên có lịch làm buổi sáng chưa check-in, **When**
+   worker reminder chạy, **Then** bot phát cảnh báo check-in lần cuối trước 12:00, tag đúng nhân viên còn thiếu,
+   bỏ qua người đã check-in hoặc đã OFF/nghỉ hợp lệ; nếu đến 12:00 vẫn không có check-in thì ngày đó mặc định
+   không làm và bị cộng phạt không check-in theo policy.
 
 ---
 
@@ -186,12 +195,13 @@ không báo, rồi tổng hợp vào sổ phạt tháng đúng cơ sở.
   báo đúng hạn.
 - Policy phạt thay đổi giữa tháng không được sửa ngược khoản phạt đã chốt; sửa sai phải bằng
   adjustment có lý do.
-- Ca đã được đổi thành `OFF` hoặc nghỉ hợp lệ trước cuối ngày không được xem là thiếu check-in và
+- Ca đã được đổi thành `OFF` hoặc nghỉ hợp lệ trước mốc 12:00 trưa theo múi giờ tenant không được xem là thiếu check-in và
   không thuộc diện phải nộp báo cáo KPI ngày đó.
 - Ngày `OFF`/ngày lễ Tết do quản lý set không được tính là ngày nghỉ cá nhân, không tiêu thụ ngưỡng
   nghỉ quá 5 ngày/tháng và không tạo phạt thiếu check-in, đi muộn hoặc thiếu báo cáo.
-- Không có check-in sau 18:00 theo múi giờ tenant được xem là không đi làm trong ngày; hệ thống không
-  yêu cầu báo cáo KPI ngày đó nhưng vẫn xử lý các violation vắng mặt/check-in theo policy.
+- Không có check-in trước 12:00 trưa theo múi giờ tenant tạo lỗi không thực hiện check-in trong ngày; nếu
+  sau mốc này vẫn không có check-in hoặc correction được quản lý duyệt thì hệ thống không yêu cầu báo cáo KPI
+  ngày đó nhưng vẫn xử lý các violation vắng mặt/check-in theo policy.
 - Video upload hoàn tất nhưng conversion thất bại hoặc provider media tạm lỗi: bản ghi nghiệp vụ
   không được chuyển sang trạng thái đã sẵn sàng giả và job phải retry an toàn.
 - Hai approver quyết định gần đồng thời trong workflow song song hoặc tuần tự không được làm đơn có
@@ -233,8 +243,8 @@ không báo, rồi tổng hợp vào sổ phạt tháng đúng cơ sở.
 - **FR-011**: Người có quyền MUST ghi nhận hoặc duyệt kết quả video đạt/không đạt tiêu chuẩn; MVP
   MUST không dùng AI để tự kết luận trang điểm, đồng phục, đầu tóc, giày dép, độ sạch hoặc bối cảnh.
 - **FR-012**: Với ca đã lên lịch và chưa được đổi thành `OFF` hoặc nghỉ hợp lệ, không có video
-  check-in đến cuối ngày theo múi giờ tenant MUST tạo violation không thực hiện check-in 50.000 VND
-  theo policy version đang hiệu lực.
+  check-in trước 12:00 trưa theo múi giờ tenant MUST tạo violation không thực hiện check-in 50.000 VND
+  theo policy version đang hiệu lực; check-in hoặc correction được duyệt sau mốc này không tự xóa violation.
 - **FR-013**: Check-in video không đạt tiêu chuẩn hình ảnh/bối cảnh MUST chỉ tạo violation 50.000 VND
   khi người có quyền review thủ công kết luận không đạt; hệ thống không tự động chấm chất lượng video
   trong MVP.
@@ -244,9 +254,9 @@ không báo, rồi tổng hợp vào sổ phạt tháng đúng cơ sở.
   đi muộn đầu tháng, không phát sinh phạt và không đánh dấu ảnh hưởng hàng đợi nhận khách.
 - **FR-016**: Check-in sau 15:00 theo múi giờ tenant MUST vẫn được coi là có đi làm trong ngày, bị
   tính đi muộn theo policy và vẫn thuộc diện phải nộp báo cáo KPI hằng ngày.
-- **FR-017**: Không có check-in sau 18:00 theo múi giờ tenant MUST làm ngày đó không thuộc diện phải
-  nộp báo cáo KPI vì được coi là không đi làm; trạng thái này không miễn các violation vắng mặt,
-  không check-in hoặc nghỉ sai quy định nếu policy áp dụng.
+- **FR-017**: Không có check-in hoặc correction được duyệt sau mốc 12:00 trưa theo múi giờ tenant MUST làm
+  ngày đó không thuộc diện phải nộp báo cáo KPI vì được coi là không đi làm; trạng thái này không miễn các
+  violation vắng mặt, không check-in hoặc nghỉ sai quy định nếu policy áp dụng.
 - **FR-018**: Mỗi nhân viên MUST được miễn tiền phạt cơ bản theo số phút cho lần đi muộn đầu tiên
   trong tháng; việc miễn này không miễn nghĩa vụ báo trước.
 - **FR-019**: Từ lần đi muộn thứ hai trong tháng, policy mặc định MUST áp dụng 1-15 phút: 20.000 VND,
@@ -320,6 +330,14 @@ không báo, rồi tổng hợp vào sổ phạt tháng đúng cơ sở.
 - **FR-049**: Hệ thống MUST tính tổng lịch nghỉ/nghỉ đột xuất đã duyệt của mỗi nhân viên trong tháng,
   trong đó nghỉ buổi sáng tính 0,5 ngày và khoảng nhiều ngày tính theo từng ngày áp dụng; khi tổng
   vượt 5 ngày, hệ thống MUST nhắc quản lý và đánh dấu nhân viên nghỉ quá hạn trong tháng.
+- **FR-050**: Trước mỗi ca 15 phút theo múi giờ tenant, worker MUST phát reminder check-in cho ca đó,
+  tag tên các membership có lịch ca nhưng chưa check-in, không `OFF`/nghỉ hợp lệ, theo phạm vi tenant/cơ sở;
+  reminder MUST idempotent theo tenant, cơ sở, ngày nghiệp vụ, ca và lead time để retry không gửi trùng.
+- **FR-051**: Trước mốc 12:00 khoảng một tiếng, mặc định 11:00 theo múi giờ tenant, worker MUST phát cảnh báo
+  check-in lần cuối cho các membership có lịch làm trong ngày nhưng chưa check-in video, không `OFF`/nghỉ hợp lệ,
+  theo phạm vi tenant/cơ sở/ca; reminder MUST idempotent theo tenant, cơ sở, ngày nghiệp vụ, ca, mốc cutoff và
+  lead time. Sau 12:00, nếu vẫn không có check-in/correction hợp lệ thì ngày đó MUST được mặc định là không làm
+  và violation/phạt không check-in MUST được tạo theo policy.
 
 ### Constitutional & Cross-Cutting Requirements *(mandatory)*
 
@@ -366,6 +384,8 @@ không báo, rồi tổng hợp vào sổ phạt tháng đúng cơ sở.
   ngưỡng 5 ngày và lần nhắc quản lý.
 - **Leave Conflict Snapshot**: Bằng chứng xung đột nghỉ theo cơ sở, bộ phận/vị trí và phân công hiệu lực.
 - **Action Item**: Việc cần hoàn thành phát sinh từ check-in, request, phạt hoặc quyết định cần duyệt.
+- **Check-in Reminder Event**: Sự kiện nhắc trước ca gồm tenant, cơ sở, ngày nghiệp vụ, ca, danh sách membership
+  được tag, loại reminder trước ca hoặc cảnh báo cuối trước 12:00, nội dung bot đã redacted và dedupe key chống gửi trùng.
 - **Attendance KPI Source Snapshot**: Nguồn có thẩm quyền cho KPI tỷ lệ đúng giờ của Module 2.
 
 ## Success Criteria *(mandatory)*
@@ -397,7 +417,12 @@ không báo, rồi tổng hợp vào sổ phạt tháng đúng cơ sở.
   khi thiếu nguồn và đạt p95 đọc dưới 500 ms trong load profile chuẩn trước production.
 - **SC-012**: Khi tổng lịch nghỉ/nghỉ đột xuất đã duyệt vượt 5 ngày/tháng, quản lý nhận đúng một
   nhắc nhở idempotent và nhân viên được đánh dấu nghỉ quá hạn trong tháng.
-- **SC-013**: Module gate chỉ được mở khi format, lint, typecheck, contract, migration, unit,
+- **SC-013**: 100% reminder trước ca trong test chạy tại mốc 15 phút trước ca chỉ tag nhân viên chưa check-in,
+  không tag người đã check-in/OFF/nghỉ hợp lệ và 100 lần retry chỉ tạo một outbox effect cho cùng tenant/cơ sở/ngày/ca.
+- **SC-014**: 100% cảnh báo check-in lần cuối trong test chạy tại 11:00 tenant-local chỉ tag nhân viên còn thiếu
+  check-in cho ngày làm việc, không tag người đã check-in/OFF/nghỉ hợp lệ và 100 lần retry chỉ tạo một outbox effect
+  cho cùng tenant/cơ sở/ngày/ca/mốc cutoff.
+- **SC-015**: Module gate chỉ được mở khi format, lint, typecheck, contract, migration, unit,
   integration, worker retry/concurrency, tenant-isolation, media lifecycle, coverage/build và load smoke
   liên quan đều PASS cục bộ/CI không cần credential cloud thật.
 

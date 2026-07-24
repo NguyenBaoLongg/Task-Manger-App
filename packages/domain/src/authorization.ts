@@ -34,8 +34,25 @@ export type PermissionCode =
   | 'workflow.decide'
   | 'attendance.leave.manage'
   | 'attendance.off-calendar.manage'
+  | 'attendance.penalty.self'
   | 'attendance.penalty.payment.manage'
-  | 'attendance.media.legal-hold';
+  | 'attendance.media.legal-hold'
+  | 'booking.customer.read'
+  | 'booking.customer.manage'
+  | 'booking.read'
+  | 'booking.manage'
+  | 'booking.arrival.manage'
+  | 'booking.outcome.manage'
+  | 'booking.tour.complete'
+  | 'booking.photo-debt.read'
+  | 'booking.config.read'
+  | 'booking.config.manage'
+  | 'booking.report.rerun'
+  | 'booking.export.read'
+  | 'booking.export.create'
+  | 'booking.export.download'
+  | 'booking.retention.manage'
+  | 'booking.legal-hold.manage';
 
 export interface EffectivePermissionBinding {
   permission: PermissionCode;

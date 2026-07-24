@@ -11,6 +11,9 @@ export interface AttendanceKpiSourceReader {
     sourceAttendanceEventId: string;
     observedAt: Date;
     value: '100' | '0';
+    dayClassification?: string;
+    scheduleVersionId?: string;
+    policyVersionId?: string;
   } | null>;
 }
 
@@ -84,11 +87,15 @@ export class KpiSourceService {
         sourceId: snapshot.sourceAttendanceEventId,
         observedAt: snapshot.observedAt,
         value: snapshot.value,
-        unit: 'percent',
+        unit: 'PERCENT',
         inputDigest: kpiDigest({
           sourceId: snapshot.sourceAttendanceEventId,
           value: snapshot.value,
           mappingId: input.mapping.id,
+          businessDate: input.businessDate,
+          dayClassification: snapshot.dayClassification,
+          scheduleVersionId: snapshot.scheduleVersionId,
+          policyVersionId: snapshot.policyVersionId,
         }),
       };
     }

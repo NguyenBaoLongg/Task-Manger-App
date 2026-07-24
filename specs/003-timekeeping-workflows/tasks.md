@@ -97,16 +97,16 @@
 
 **Goal**: Employees acknowledge the video policy, check in with governed video media, and receive explainable late classification and penalties without AI auto-scoring.
 
-**Independent Test**: Check in at 08:30:59, 08:45:59, 08:46:00, after 15:00, and no-check-in after 18:00; verify schedule snapshot, media lifecycle, manual video review and late/no-check-in outputs.
+**Independent Test**: Check in at 08:30:59, 08:45:59, 08:46:00, after 15:00, and no-check-in by the 12:00 tenant-local cutoff; verify schedule snapshot, media lifecycle, manual video review and late/no-check-in outputs.
 
 ### Tests for User Story 2
 
-- [X] T041 [P] [US2] Add unit tests for check-in timestamp normalization, late-minute rounding, 15:00/18:00 classification and `queue_impact_flag` behavior in `packages/domain/src/attendance/time.test.ts`
+- [X] T041 [P] [US2] Add unit tests for check-in timestamp normalization, late-minute rounding, 12:00 missing-check-in cutoff, 15:00 worked-late classification and `queue_impact_flag` behavior in `packages/domain/src/attendance/time.test.ts`
 - [X] T042 [P] [US2] Add unit tests for first-late exemption, 1-15/16-89/90+ tiers, approved late discount and no-notice surcharge in `packages/domain/src/attendance/late-penalty.test.ts`
 - [X] T043 [P] [US2] Add contract tests for video policy version configuration, acknowledgement, check-in and manual video review endpoints in `apps/api/tests/contract/attendance-checkin.contract.test.ts`
 - [X] T044 [P] [US2] Add integration tests for video policy acknowledgement, check-in snapshot and manual failed video review in `apps/api/tests/integration/attendance-checkin.integration.test.ts`
 - [X] T045 [P] [US2] Add worker retry tests for video conversion READY/FAILED states without duplicate media or violations in `apps/worker/tests/unit/attendance-video-conversion.test.ts`
-- [X] T046 [P] [US2] Add integration tests for day-close missing check-in, after-15:00 worked-late, after-18:00 non-worked classification and tenant/branch queue-impact signal creation for late worked days in `apps/worker/tests/integration/attendance-day-close.integration.test.ts`
+- [X] T046 [P] [US2] Add integration tests for 12:00 missing check-in, after-15:00 worked-late, post-cutoff non-worked classification and tenant/branch queue-impact signal creation for late worked days in `apps/worker/tests/integration/attendance-day-close.integration.test.ts`
 
 ### Implementation for User Story 2
 
@@ -225,7 +225,7 @@
 
 **Purpose**: Close gaps across contracts, docs, privacy, performance and module gates after selected user stories are implemented.
 
-- [X] T105 [P] Complete requirement-to-task-to-test traceability for FR-001 through FR-049 and CR-001 through CR-006 in `specs/003-timekeeping-workflows/tasks.md`
+- [X] T105 [P] Complete requirement-to-task-to-test traceability for FR-001 through FR-051 and CR-001 through CR-006 in `specs/003-timekeeping-workflows/tasks.md`
 - [X] T106 [P] Update local validation notes for any implementation-specific commands discovered during development in `specs/003-timekeeping-workflows/quickstart.md`
 - [X] T107 [P] Add Module 3 load smoke profile for 10.000 video check-ins/day and p95 attendance/action-item reads, then wire it into `tests/load/smoke-runner.mjs` from `tests/load/timekeeping-smoke-runner.mjs`
 - [X] T108 [P] Add secret, signed URL, evidence redaction, retention, tombstone and legal-hold regression coverage for API and worker logs in `apps/api/tests/integration/security-regression.integration.test.ts`
@@ -235,6 +235,10 @@
 - [X] T112 Run and fix Module 3 coverage, build and load smoke evidence from `package.json`
 - [X] T113 Re-run quickstart scenarios 1 through 8 and record pass/fail evidence in `specs/003-timekeeping-workflows/quickstart.md`
 - [X] T114 Prepare for `$speckit-converge` by confirming no task references implementation outside Module 3 scope in `specs/003-timekeeping-workflows/tasks.md`
+- [X] T115 [P] [US2] Add 15-minute pre-shift check-in reminder domain and worker unit tests in `packages/domain/src/attendance/check-in-reminder.test.ts` and `apps/worker/tests/unit/attendance-check-in-reminder.test.ts`
+- [X] T116 [US2] Implement idempotent check-in reminder outbox fan-out for unchecked-in scheduled members in `packages/domain/src/attendance/check-in-reminder.ts`, `packages/database/src/attendance-worker.repository.ts`, `apps/worker/src/attendance/check-in-reminder-runner.ts` and `apps/worker/src/outbox/outbox-dispatcher.ts`
+- [X] T117 [P] [US2] Add final pre-noon check-in warning domain, worker and outbox fan-out tests in `packages/domain/src/attendance/check-in-reminder.test.ts`, `apps/worker/tests/unit/attendance-check-in-reminder.test.ts` and `apps/worker/tests/unit/outbox-dispatcher.test.ts`
+- [X] T118 [US2] Implement idempotent 11:00 tenant-local final no-check-in warning for scheduled unchecked-in members in `packages/domain/src/attendance/check-in-reminder.ts`, `packages/database/src/attendance-worker.repository.ts`, `apps/worker/src/attendance/check-in-reminder-runner.ts` and `apps/worker/src/outbox/outbox-dispatcher.ts`
 
 ---
 
@@ -379,8 +383,38 @@ Task T094: Add privacy integration tests in apps/api/tests/integration/attendanc
 | FR-044..FR-046 attendance KPI source and action item projections | T101..T104 | `attendance-kpi-source.service.test.ts`, privacy/security regression tests |
 | FR-047 seed data | T024, T028, T040, T058, T073, T089 | `timekeeping-seed.integration.test.ts`, `verify-timekeeping-seed.ts` |
 | FR-048..FR-049 company/branch OFF and monthly absence threshold | T074..T089 | OFF calendar shell, monthly absence runner test, quickstart scenario evidence |
-| CR-001..CR-006 tenant isolation, RBAC, auditability, idempotency, privacy, retention and scale gates | T011..T028, T063, T104..T114 | contract/security/load smoke/typecheck/lint/build/coverage evidence |
+| FR-050 15-minute pre-shift check-in reminder | T115..T116 | `check-in-reminder.test.ts`, `attendance-check-in-reminder.test.ts`, `outbox-dispatcher.test.ts` |
+| FR-051 final pre-noon no-check-in warning | T117..T118 | `check-in-reminder.test.ts`, `attendance-check-in-reminder.test.ts`, `outbox-dispatcher.test.ts`, scheduler tick evidence |
+| CR-001..CR-006 tenant isolation, RBAC, auditability, idempotency, privacy, retention and scale gates | T011..T028, T063, T104..T118 | contract/security/load smoke/typecheck/lint/build/coverage evidence |
 
 ## Scope Confirmation
 
 T114 check: Module 3 tasks and implementation remain limited to backend/API/database/worker/contracts/tests for schedules, video attendance, late/leave/OFF, approval workflows, penalties, media retention and KPI source. The task list still excludes mobile UI, booking queue logic, payroll/payment gateway, leave balance/accrual, AI video scoring and a general workflow builder.
+
+## Phase 9: Convergence
+
+- [X] T119 CRITICAL: Persist workflow approver rules, resolve eligible approvers per tenant/branch scope, and reject out-of-scope decisions with unit, contract and integration coverage per Constitution II, FR-030 and FR-032
+- [X] T120 CRITICAL: Replace the day-close stub with idempotent tenant-timezone processing that scans scheduled employees, applies the 12:00 no-check-in cutoff, creates missing-check-in/non-worked attendance records, suppresses OFF/approved leave, projects action items and preserves KPI report ineligibility evidence per US2, FR-012, FR-017 and FR-051
+- [X] T121 CRITICAL: Make attendance scheduler iterate active tenants with correct local business dates/months for video conversion, day-close, monthly absence and media retention, using attendance job runs/retry-safe dedupe instead of empty tenant inputs per Constitution I, Constitution VI and plan worker jobs
+- [X] T122 Implement approved `SHIFT_CHANGE` and `LATE_NOTICE` final effects exactly once, including schedule-version creation and approved-on-time late-notice penalty adjustment tests, per US3, FR-020 and FR-021
+- [X] T123 Wire automatic violation and settlement assessment from late occurrences, failed manual video review, missing check-in, sudden-leave no-notice, sudden-leave over-limit and leave-rule violations with explainable component snapshots per US5, FR-014..FR-028 and FR-037..FR-039
+- [X] T124 Align Module 3 outbox producers and contract tests with `contracts/domain-events.md` event names, including `attendance.checkin.recorded`, `attendance.penalty.settled`, `workflow.decision.recorded` and `workflow.request.resolved`, per domain event contracts
+- [X] T125 Wire media retention/tombstone/legal-hold execution end-to-end for scheduled worker runs covering attendance video, leave evidence and payment proof media, and add privacy/log-redaction regression coverage per FR-043 and CR-004
+- [X] T126 Align the `ATTENDANCE_ON_TIME_RATE` KPI source snapshot with the adapter contract by returning unit `PERCENT`, digesting classification/schedule/policy/business-date inputs and keeping media metadata redacted per FR-044 and `contracts/attendance-source-adapter.md`
+- [X] T127 Replace shell-only integration checks for day-close, OFF calendar suppression, workflow isolation/concurrency, penalty settlement and media retention with real DB assertions or deterministic repository harnesses so `test:integration` fails on the gaps above per T046, T077, T094, T111 and quickstart gates
+
+## Phase 10: Final Convergence
+
+- [X] T128 CRITICAL: Refactor workflow decision persistence and approved final effects into one tenant-scoped transaction/Unit of Work that locks the request, records the decision, applies schedule/leave/late-notice effects, writes audit/outbox/action-item changes and remains exactly-once under retries and concurrent decisions; add deterministic repository and concurrency coverage in `packages/database/src/workflow.repository.ts`, `apps/api/src/modules/workflows/workflow-service.ts`, `apps/api/src/modules/workflows/workflow-effects.ts` and `apps/api/tests/integration/workflows-concurrency.integration.test.ts` per Constitution III, FR-032 and FR-034 (contradicts)
+- [X] T129 CRITICAL: Implement durable attendance worker claim/lease/heartbeat/checkpoint/complete/fail/reclaim semantics for tenant day/month runs and atomic per-asset video-conversion claims, then verify retry, crash recovery and concurrent worker exclusion in `packages/database/src/attendance-worker.repository.ts`, `apps/worker/src/attendance/scheduler.ts`, `apps/worker/src/attendance/video-conversion-runner.ts` and worker integration tests per Constitution VI, plan worker jobs and CR-003 (partial)
+- [X] T130 Make effective `VideoPolicyVersion`, `AttendancePenaltyPolicyVersion` and `WorkflowDefinitionVersion` resolution explicitly prefer an applicable branch override over the tenant default while preserving effective-date and latest-version ordering; add branch/tenant isolation and fallback tests in the attendance, penalty and workflow repositories per FR-025, FR-029 and data-model policy precedence (contradicts)
+- [X] T131 Replace string-built monthly late boundaries with tenant-local `[monthStart, nextMonthStart)` calculation and make monthly late sequence allocation concurrency-safe; cover February, leap years, day 31, timezone boundaries and simultaneous check-ins in `packages/database/src/attendance.repository.ts` and attendance integration tests per FR-018 and SC-006 (contradicts)
+- [X] T132 Enforce the 30-minute late-notice deadline from backend-authoritative scheduled shift time, persist the eligibility snapshot and ensure late, missing, pending or rejected notices never receive the discount while approved on-time notices adjust penalties idempotently; cover every state in workflow, attendance and penalty tests per FR-020 through FR-022 (missing)
+- [X] T133 Complete leave semantics across every active department/position assignment, represent morning half-day effects without suppressing the whole workday, and count approved date ranges that cross month boundaries correctly in conflict checks, day close and monthly absence summaries; add deterministic and integration coverage per FR-035, FR-041 and FR-042 (partial)
+- [X] T134 Wire automatic, idempotent `LEAVE_RULE_VIOLATION` assessment into the authoritative invalid/self-absence path, including the 200,000 VND component snapshot, audit/outbox records and duplicate-run protection; verify blocked, approved-exception and repeated-worker cases per FR-039 and T123 (missing)
+- [X] T135 Resolve eligible approvers and branch/company managers tenant-safely for workflow-step and monthly-absence-threshold events, create/close action items and dispatch retry-safe per-recipient notifications with stable dedupe keys; cover one-level, sequential, parallel, reassignment and over-five-day scenarios in repository, dispatcher and integration tests per FR-033, FR-046 and FR-049 (missing)
+- [X] T136 Implement transactional producers for `attendance.video-policy.acknowledged`, `attendance.video.conversion-requested`, `attendance.video.ready` and `attendance.video.failed`, plus the conversion/review action-item lifecycle, redacted payloads and idempotent contract tests across API, repository and worker paths per `contracts/domain-events.md`, FR-007 through FR-013 and FR-046 (missing)
+- [X] T137 Split employee-self and manager penalty permissions so an employee can list only their own settlements and submit their own payment proof, while scoped managers can review, confirm, reject, waive or refund; enforce tenant/branch ownership, transition rules, audit and idempotency in routes/services/contracts/integration tests per US5, FR-026 through FR-028 and Constitution II (contradicts)
+- [X] T138 Replace remaining placeholder, skipped or mock-only Module 3 integration coverage with real database assertions or deterministic repository harnesses for check-in policy/media snapshots, workflow routing and 100-way decision/final-effect concurrency, multi-assignment leave conflicts, penalty persistence/audit, media retention/legal hold and tenant/RBAC isolation; make `test:integration` fail on each behavioral regression per Constitution V, SC-015 and T127 (partial)
+- [X] T139 Replace the marker-only timekeeping load smoke with an executable credential-free workload that processes the planned 10,000-check-in daily profile, exercises API/worker batching and records/asserts p95 against the documented target; keep it wired through `tests/load/smoke-runner.mjs` and the package script per CR-005, SC-011 and plan performance validation (partial)
+- [X] T140 Run and record the final Module 3 migration, format, lint, typecheck, unit, contract, integration, coverage, build and load gates after T128-T139; resolve the current formatting failures and update `quickstart.md` with truthful non-placeholder test counts, skipped-test rationale and reproducible evidence before declaring the dependency gate met per SC-015 and plan validation notes (partial)

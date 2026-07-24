@@ -1,4 +1,23 @@
-import type { ViolationKind } from './types.js';
+import type { PenaltySettlementStatus, ViolationKind } from './types.js';
+import { ProblemError } from '../foundation.js';
+
+const paymentTransitions: Record<PenaltySettlementStatus, readonly PenaltySettlementStatus[]> = {
+  PENDING: ['SUBMITTED', 'WAIVED'],
+  SUBMITTED: ['CONFIRMED', 'REJECTED', 'WAIVED'],
+  CONFIRMED: ['REFUNDED'],
+  REJECTED: ['SUBMITTED', 'WAIVED'],
+  WAIVED: [],
+  REFUNDED: [],
+};
+
+export function assertPenaltyPaymentTransition(
+  fromStatus: PenaltySettlementStatus,
+  toStatus: PenaltySettlementStatus,
+) {
+  if (!paymentTransitions[fromStatus].includes(toStatus)) {
+    throw new ProblemError(409, 'CONFLICT', 'Chuyen trang thai nop phat khong hop le.');
+  }
+}
 
 export interface PenaltyComponentInput {
   kind: ViolationKind;

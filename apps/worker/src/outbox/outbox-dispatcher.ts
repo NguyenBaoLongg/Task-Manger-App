@@ -37,6 +37,89 @@ export class OutboxDispatcher {
             kpiDefinitionId: String(payload.kpiDefinitionId),
           });
         }
+        if (row.eventType === 'attendance.checkin-reminder.due') {
+          const membershipIds = Array.isArray(payload.mentionMembershipIds)
+            ? payload.mentionMembershipIds.filter(
+                (item): item is string => typeof item === 'string',
+              )
+            : [];
+          const isFinalReminder = payload.reminderKind === 'NOON_FINAL';
+          for (const membershipId of membershipIds) {
+            await this.notifications.notify({
+              tenantId: row.tenantId,
+              membershipId,
+              eventId: row.id,
+              type: row.eventType,
+              dedupeKey: `${row.id}:${membershipId}`,
+              title: isFinalReminder ? 'Nhắc check-in lần cuối' : 'Nhắc check-in',
+              body: typeof payload.messageBody === 'string' ? payload.messageBody : undefined,
+              data: {
+                sourceType: 'ATTENDANCE_CHECKIN_REMINDER',
+                reminderKind: isFinalReminder ? 'NOON_FINAL' : 'PRE_SHIFT',
+                businessDate: typeof payload.businessDate === 'string' ? payload.businessDate : '',
+                shiftStartLocalTime:
+                  typeof payload.shiftStartLocalTime === 'string'
+                    ? payload.shiftStartLocalTime
+                    : '',
+                cutoffLocalTime:
+                  typeof payload.cutoffLocalTime === 'string' ? payload.cutoffLocalTime : '',
+              },
+            });
+          }
+        }
+        if (row.eventType === 'workflow.step.activated') {
+          const membershipIds = stringArray(payload.approverMembershipIds);
+          for (const membershipId of membershipIds) {
+            await this.notifications.notify({
+              tenantId: row.tenantId,
+              membershipId,
+              eventId: row.id,
+              type: row.eventType,
+              dedupeKey: `${row.id}:${membershipId}`,
+              title: 'Co yeu cau can duyet',
+              data: {
+                requestId: readString(payload.requestId),
+                requestType: readString(payload.requestType),
+                sourceType: 'APPROVAL_DECISION_REQUIRED',
+              },
+            });
+          }
+        }
+        if (row.eventType === 'workflow.request.resolved') {
+          const membershipId = payload.requestedByMembershipId;
+          if (typeof membershipId === 'string') {
+            await this.notifications.notify({
+              tenantId: row.tenantId,
+              membershipId,
+              eventId: row.id,
+              type: row.eventType,
+              dedupeKey: `${row.id}:${membershipId}`,
+              title: 'Yeu cau da duoc xu ly',
+              data: {
+                requestId: readString(payload.requestId),
+                status: readString(payload.status),
+              },
+            });
+          }
+        }
+        if (row.eventType === 'absence.summary.threshold-exceeded') {
+          for (const membershipId of stringArray(payload.managerMembershipIds)) {
+            await this.notifications.notify({
+              tenantId: row.tenantId,
+              membershipId,
+              eventId: row.id,
+              type: row.eventType,
+              dedupeKey: `${row.id}:${membershipId}`,
+              title: 'Nhan su nghi qua nguong thang',
+              data: {
+                summaryId: readString(payload.summaryId),
+                employeeMembershipId: readString(payload.membershipId),
+                yearMonth: readString(payload.yearMonth),
+                sourceType: 'ABSENCE_OVER_THRESHOLD',
+              },
+            });
+          }
+        }
         if (row.eventType.includes('penalty') || row.eventType.includes('evidence')) {
           const membershipId = payload.membershipId;
           if (typeof membershipId === 'string') {
@@ -66,4 +149,14 @@ export class OutboxDispatcher {
     }
     return { claimed: rows.length, sent, failed };
   }
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }

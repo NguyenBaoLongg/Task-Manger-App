@@ -90,6 +90,9 @@ function timekeepingDependencies(): AppDependencies {
         async listSettlements() {
           return { items: [], pageInfo: { nextCursor: null } };
         },
+        async getSettlement() {
+          return { membershipId: uuid, branchId: uuid };
+        },
         async transitionPayment() {
           return {
             id: uuid,

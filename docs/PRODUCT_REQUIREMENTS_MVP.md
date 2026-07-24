@@ -119,6 +119,9 @@ Seed data phải có tính quyết định để có thể dùng trong test và 
 - Bằng chứng xác nhận phải lưu tối thiểu `tenant_id`, `tenant_membership_id`, policy version, thời điểm server, phiên đăng nhập/thiết bị ở mức phù hợp và hành động xác nhận. Không được suy ra sự đồng ý chỉ từ việc người dùng đã đăng nhập hoặc đã từng gửi video theo phiên bản cũ.
 - Tiêu chuẩn tác phong: đồng phục chỉn chu, mặt trang điểm, đầu tóc gọn gàng, giày dép sạch sẽ.
 - Không check-in hoặc check-in không đạt tiêu chuẩn: phạt 50.000 VND/lần.
+- Trước mỗi ca 15 phút, bot hệ thống phải gửi thông báo vào kênh/nền tảng thông báo nội bộ phù hợp và tag tên các nhân viên có lịch ca đó nhưng chưa check-in video. Thông báo phải tenant/branch-scoped, không gửi trùng khi worker retry và không tag nhân viên đang `OFF` hoặc nghỉ hợp lệ.
+- Trước mốc 12:00 khoảng 1 tiếng, mặc định 11:00 theo múi giờ tenant, hệ thống phải gửi cảnh báo check-in lần cuối và tag tên các nhân viên có lịch làm trong ngày nhưng vẫn chưa check-in video. Cảnh báo cuối phải tenant/branch-scoped, không gửi trùng khi worker retry và không tag nhân viên đang `OFF` hoặc nghỉ hợp lệ.
+- Với ngày có ca làm và không phải `OFF`/nghỉ hợp lệ, nhân viên phải có video check-in trước 12:00 trưa theo múi giờ tenant. Đến 12:00 chưa có check-in thì hệ thống tạo lỗi không thực hiện check-in 50.000 VND theo policy; check-in hoặc xác nhận bổ sung sau đó chỉ dùng để xác định có đi làm và tính đi muộn, không tự xóa lỗi không check-in trước 12:00.
 - Trong MVP, hệ thống lưu video và kết quả duyệt. Không mặc định dùng AI để tự kết luận trang điểm, đồng phục hay độ sạch; cần người có quyền duyệt nếu chưa có mô hình được kiểm chứng.
 
 ### 6.2 Đi muộn

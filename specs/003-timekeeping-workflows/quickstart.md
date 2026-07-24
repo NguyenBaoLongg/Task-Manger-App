@@ -58,6 +58,39 @@ Expected:
 - Worker retry does not create duplicate media/violations.
 - Manual failed review creates `VIDEO_STANDARD_FAILED`; no AI decision exists.
 
+## Scenario 2A: 15-minute pre-shift check-in reminder
+
+Use deterministic test clock for shift 08:30:
+
+1. Schedule three employees for the 08:30 shift in the same branch.
+2. Record check-in for one employee before 08:15.
+3. Mark one employee as `OFF` or approved leave.
+4. Run the reminder worker at 08:15 tenant-local time.
+
+Expected:
+
+- Bot reminder is produced once for the branch/shift/business date.
+- Reminder tags only the remaining scheduled employee who has not checked in.
+- Retry with the same tenant, branch, date, shift and 15-minute lead time does not create a duplicate reminder.
+
+## Scenario 2B: Final check-in warning before noon
+
+Use deterministic test clock for the 12:00 missing-check-in cutoff:
+
+1. Schedule three employees for morning shifts in the same branch.
+2. Record check-in for one employee before 11:00.
+3. Mark one employee as `OFF` or approved leave.
+4. Run the reminder worker at 11:00 tenant-local time.
+5. Run attendance close at 12:00 tenant-local time with the remaining employee still missing check-in.
+
+Expected:
+
+- Bot final warning is produced once for the branch/shift/business date/cutoff.
+- Final warning tags only the remaining scheduled employee who has not checked in.
+- Retry with the same tenant, branch, date, shift, cutoff and 60-minute lead time does not create a duplicate reminder.
+- At 12:00, the remaining employee defaults to non-worked for report requirement and receives the missing-check-in
+  penalty unless a valid OFF/leave/correction path exists.
+
 ## Scenario 3: Late calculation and reporting eligibility
 
 Use deterministic test clock for shift 08:30:
@@ -66,7 +99,8 @@ Use deterministic test clock for shift 08:30:
 - 08:45:59 => 15 late minutes.
 - 08:46:00 => 16 late minutes.
 - After 15:00 => worked late and KPI report is still required.
-- No check-in after 18:00 => non-worked for KPI report, but attendance/absence policy still applies.
+- No check-in by 12:00 tenant-local time => missing-check-in penalty is created; later check-in/correction can prove
+  worked status and calculate lateness but does not automatically remove the pre-noon violation.
 
 Expected:
 
@@ -142,15 +176,18 @@ Expected:
 ## Required gates before Module 3 can close
 
 ```powershell
-npm run format:check
-npm run lint
-npm run typecheck
-npm run test
-npm run test:contract
-npm run test:integration
-npm run test:migration
-npm run test:coverage
-npm run build
+corepack pnpm db:generate
+corepack pnpm format:check
+corepack pnpm lint
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm test:contract
+corepack pnpm test:integration
+corepack pnpm test:migration
+corepack pnpm test:coverage
+corepack pnpm contracts:validate
+corepack pnpm build
+corepack pnpm load:smoke
 ```
 
 Additional Module 3-specific evidence:
@@ -160,31 +197,49 @@ Additional Module 3-specific evidence:
 - Deterministic seed rerun count including shifts, policies, workflows and OFF calendar examples.
 - Load smoke for 10.000 check-in/day profile and p95 attendance/action-item reads.
 
-## Implementation validation notes (2026-07-21)
+## Implementation validation notes (2026-07-24)
 
-`npm run ...` could not be used in this local shell because the global `npm-cli.js` path is missing. Equivalent
-project-local commands were run through `corepack pnpm`, `node_modules/.bin/*.cmd` and `node`.
+All credential-free Module 3 gates were rerun from the repository root with Node 24 and project-local
+`corepack pnpm`.
 
 Commands and evidence:
 
-- Format: `.\node_modules\.bin\prettier.cmd --check .` => pass.
-- Lint: `.\node_modules\.bin\eslint.cmd . --max-warnings=0` => pass.
-- Typecheck: `corepack pnpm -r --if-present typecheck` => pass for config, contracts, domain, database, testing, API and worker.
-- Unit: `.\node_modules\.bin\vitest.cmd run --exclude "**/*.integration.test.ts" --exclude "**/*.contract.test.ts" --exclude "tests/migration/**"` => 32 files, 82 tests pass.
-- Contract: `.\node_modules\.bin\vitest.cmd run apps/api/tests/contract` => 19 files, 74 tests pass.
-- Integration/worker: `.\node_modules\.bin\vitest.cmd run apps/api/tests/integration apps/worker/tests/integration` => 9 files and 14 tests pass; 24 live DB suites and 43 tests skipped because `DATABASE_URL` is not set.
-- Migration: `.\node_modules\.bin\vitest.cmd run tests/migration` => 4 files and 13 tests pass; 1 live DB seed suite and 3 tests skipped because `DATABASE_URL` is not set.
-- Coverage: `.\node_modules\.bin\vitest.cmd run --coverage` => 64 files and 183 tests pass; 25 files and 46 tests skipped.
-- Build: `corepack pnpm -r --if-present build` => pass for all buildable workspaces.
-- Load smoke: `node tests/load/smoke-runner.mjs` => `LOAD_SMOKE_SCRIPT_OK`, `KPI_LOAD_SMOKE_OK`, `TIMEKEEPING_LOAD_SMOKE_OK`.
+- Prisma generation: `corepack pnpm db:generate` => Prisma Client 7.8.0 generated successfully.
+- Format: `corepack pnpm format:check` => all matched files pass Prettier.
+- Lint: `corepack pnpm lint` => pass with zero warnings.
+- Typecheck: `corepack pnpm -r typecheck` => pass for config, contracts, domain, database, testing, API and worker.
+- Unit: `corepack pnpm test` => 43 files and 122 tests pass.
+- Contract: `corepack pnpm test:contract` => 19 files and 75 tests pass.
+- OpenAPI: `corepack pnpm contracts:validate` => 1 file and 2 tests pass.
+- Integration/worker: `corepack pnpm test:integration` => 19 files and 31 tests pass.
+  Fifteen PostgreSQL-backed files containing 34 tests are skipped because `DATABASE_URL` is not set;
+  the corresponding credential-free Module 3 behaviors run in deterministic repository harnesses.
+- Migration: `corepack pnpm test:migration` => 4 files and 13 tests pass. One live seed file containing
+  3 tests is skipped because `DATABASE_URL` is not set; schema and migration ordering checks pass.
+- Coverage: `corepack pnpm test:coverage` => 85 files and 241 tests pass; 16 live-database files and
+  37 tests are skipped. Overall coverage is 51.26% statements, 38.22% branches, 45.42% functions and
+  51.61% lines.
+- Build: `corepack pnpm build` => pass for every buildable workspace.
+- Load smoke: `corepack pnpm load:smoke` => 10,000 check-ins accepted and 10,000 videos converted
+  through 100 API batches and 50 worker batches; 30,000 tenant-scoped reads record p95 0.001 ms
+  against the documented p95 target below 500 ms.
 
 Scenario evidence:
 
-- Scenario 1 schedule versioning: pass via `attendance/schedule` unit, schedule contract, schedule integration shell and tenant isolation tests.
-- Scenario 2 video policy/check-in: pass via check-in contract, video conversion unit and check-in integration shell.
-- Scenario 3 late calculation/reporting eligibility: pass via `attendance/time` and `attendance/late-penalty` unit tests.
-- Scenario 4 OFF calendar: pass via absence unit, leave contract, OFF calendar integration shell and day-close suppression implementation.
-- Scenario 5 approval workflow races: pass via workflow state-machine unit, workflow contract, workflow concurrency/isolation integration shells.
-- Scenario 6 leave conflicts/monthly threshold: pass via absence unit, leave contract, leave conflict shell and monthly absence runner test.
-- Scenario 7 penalty settlement/payment: pass via penalty settlement unit and penalty contract; full DB audit/payment integration shell skipped without `DATABASE_URL`.
-- Scenario 8 KPI attendance source: pass via attendance KPI source unit and privacy integration shell.
+- Scenario 1 schedule versioning: covered by schedule service/contract tests and live PostgreSQL history/isolation suites.
+- Scenario 2 video policy/check-in: deterministic integration verifies acknowledgement plus persisted policy,
+  schedule and media snapshots; worker tests cover conversion claim/retry.
+- Scenario 3 late calculation/reporting eligibility: domain boundaries, tenant-local monthly allocation and
+  concurrent late sequence tests pass.
+- Scenario 4 OFF calendar: absence/day-close tests cover tenant and branch suppression, versioning and audit paths.
+- Scenario 5 approval workflow races: routing harness and repository concurrency test verify 100 concurrent
+  decisions, one decision record and one final effect.
+- Scenario 6 leave conflicts/monthly threshold: deterministic integration covers every active assignment,
+  cross-month ranges, half-days and manager threshold notification.
+- Scenario 7 penalty settlement/payment: employee-self and scoped-manager tests cover ownership, state transitions,
+  idempotency, audit and redacted outbox persistence.
+- Scenario 8 KPI attendance source: attendance KPI source and privacy integration verify `100`, `0` and `null`
+  semantics without media URLs or sensitive metadata.
+
+The local dependency gate is met. Before production deployment, run `corepack pnpm db:migrate:deploy`,
+`corepack pnpm db:seed` and the skipped PostgreSQL suites against the target database.

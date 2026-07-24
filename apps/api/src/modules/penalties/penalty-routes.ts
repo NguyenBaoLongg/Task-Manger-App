@@ -4,6 +4,7 @@ import {
   paymentTransitionRequestSchema,
   penaltySettlementQuerySchema,
 } from '@adsup/contracts';
+import { ProblemError } from '@adsup/domain';
 import type {
   AuthTenantsRepository,
   GovernanceRepository,
@@ -27,6 +28,10 @@ export interface PenaltyRoutesDependencies {
   readonly penaltyService?: {
     createPolicyVersion(input: Record<string, unknown>): Promise<unknown>;
     listSettlements(input: Record<string, unknown>): Promise<unknown>;
+    getSettlement(
+      tenantId: string,
+      settlementId: string,
+    ): Promise<{ membershipId: string; branchId: string } | null>;
     transitionPayment(input: Record<string, unknown>): Promise<unknown>;
   };
 }
@@ -68,15 +73,30 @@ export function penaltyRoutes(deps: PenaltyRoutesDependencies = {}): Router {
     '/tenants/:tenantId/attendance/penalty-settlements',
     auth,
     scoped,
-    requirePermission(deps.rbacRepo, 'attendance.penalty.payment.manage', (request) =>
-      typeof request.query.branchId === 'string' ? request.query.branchId : undefined,
-    ),
     async (request: AuthenticatedRequest, response) => {
       const query = penaltySettlementQuerySchema.parse(request.query);
+      const [canManage, canReadSelf] = await Promise.all([
+        deps.rbacRepo!.hasPermission(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+          'attendance.penalty.payment.manage',
+          query.branchId,
+        ),
+        deps.rbacRepo!.hasPermission(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+          'attendance.penalty.self',
+        ),
+      ]);
+      if (!canManage && !canReadSelf) {
+        throw new ProblemError(403, 'AUTHORIZATION_DENIED', 'Khong co quyen xem khoan phat.');
+      }
       response.json(
         kpiJsonSafe(
           await deps.penaltyService!.listSettlements({
             tenantId: request.tenant!.tenantId,
+            actorMembershipId: request.tenant!.membershipId,
+            canManage,
             ...query,
           }),
         ),
@@ -88,9 +108,34 @@ export function penaltyRoutes(deps: PenaltyRoutesDependencies = {}): Router {
     '/tenants/:tenantId/attendance/penalty-settlements/:settlementId/payment-transitions',
     auth,
     scoped,
-    requirePermission(deps.rbacRepo, 'attendance.penalty.payment.manage'),
     async (request: AuthenticatedRequest, response) => {
       const body = paymentTransitionRequestSchema.parse(request.body);
+      const settlement = await deps.penaltyService!.getSettlement(
+        request.tenant!.tenantId,
+        String(request.params.settlementId),
+      );
+      if (!settlement)
+        throw new ProblemError(404, 'RESOURCE_NOT_FOUND', 'Khong tim thay khoan phat.');
+      const [selfAllowed, canManage] = await Promise.all([
+        deps.rbacRepo!.hasPermission(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+          'attendance.penalty.self',
+        ),
+        deps.rbacRepo!.hasPermission(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+          'attendance.penalty.payment.manage',
+          settlement.branchId,
+        ),
+      ]);
+      const isOwnSubmission =
+        body.toStatus === 'SUBMITTED' &&
+        selfAllowed &&
+        settlement.membershipId === request.tenant!.membershipId;
+      if (!isOwnSubmission && !canManage) {
+        throw new ProblemError(403, 'AUTHORIZATION_DENIED', 'Khong co quyen xu ly khoan phat.');
+      }
       const result = await tenantIdempotent(
         deps.governance,
         request,
@@ -100,10 +145,11 @@ export function penaltyRoutes(deps: PenaltyRoutesDependencies = {}): Router {
           deps.penaltyService!.transitionPayment({
             ...body,
             tenantId: request.tenant!.tenantId,
-            settlementId: request.params.settlementId,
+            settlementId: String(request.params.settlementId),
             actorMembershipId: request.tenant!.membershipId,
             correlationId: request.tenant!.correlationId,
             idempotencyKey: request.header('idempotency-key') ?? request.tenant!.correlationId,
+            canManage,
           }),
       );
       response.json(kpiJsonSafe(result));

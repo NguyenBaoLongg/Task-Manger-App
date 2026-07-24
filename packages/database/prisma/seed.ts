@@ -45,8 +45,25 @@ const permissionCodes = [
   'workflow.decide',
   'attendance.leave.manage',
   'attendance.off-calendar.manage',
+  'attendance.penalty.self',
   'attendance.penalty.payment.manage',
   'attendance.media.legal-hold',
+  'booking.customer.read',
+  'booking.customer.manage',
+  'booking.read',
+  'booking.manage',
+  'booking.arrival.manage',
+  'booking.outcome.manage',
+  'booking.tour.complete',
+  'booking.photo-debt.read',
+  'booking.config.read',
+  'booking.config.manage',
+  'booking.report.rerun',
+  'booking.export.read',
+  'booking.export.create',
+  'booking.export.download',
+  'booking.retention.manage',
+  'booking.legal-hold.manage',
 ] as const;
 
 const branchScopedPermissionCodes = new Set([
@@ -66,6 +83,22 @@ const branchScopedPermissionCodes = new Set([
   'attendance.leave.manage',
   'attendance.off-calendar.manage',
   'attendance.penalty.payment.manage',
+  'booking.customer.read',
+  'booking.customer.manage',
+  'booking.read',
+  'booking.manage',
+  'booking.arrival.manage',
+  'booking.outcome.manage',
+  'booking.tour.complete',
+  'booking.photo-debt.read',
+  'booking.config.read',
+  'booking.config.manage',
+  'booking.report.rerun',
+  'booking.export.read',
+  'booking.export.create',
+  'booking.export.download',
+  'booking.retention.manage',
+  'booking.legal-hold.manage',
 ]);
 
 const stable = (prefix: number, index: number) =>
@@ -216,7 +249,22 @@ async function main() {
     'workflow.decide',
     'attendance.leave.manage',
     'attendance.off-calendar.manage',
+    'attendance.penalty.self',
     'attendance.penalty.payment.manage',
+    'booking.customer.read',
+    'booking.customer.manage',
+    'booking.read',
+    'booking.manage',
+    'booking.arrival.manage',
+    'booking.outcome.manage',
+    'booking.tour.complete',
+    'booking.photo-debt.read',
+    'booking.config.read',
+    'booking.config.manage',
+    'booking.report.rerun',
+    'booking.export.read',
+    'booking.export.create',
+    'booking.export.download',
   ]);
   const employeeCodes = new Set([
     'tenant.read',
@@ -230,6 +278,12 @@ async function main() {
     'kpi.view',
     'kpi.report.submit',
     'attendance.schedule.self',
+    'attendance.penalty.self',
+    'booking.customer.read',
+    'booking.read',
+    'booking.arrival.manage',
+    'booking.tour.complete',
+    'booking.photo-debt.read',
   ]);
   for (const permission of allPermissions) {
     if (managerCodes.has(permission.code))
@@ -402,6 +456,21 @@ async function main() {
         properties: {
           shiftCode: { type: 'string', enum: ['SHIFT_0830', 'SHIFT_0930'] },
           note: { type: 'string', maxLength: 1000 },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
+      id: stable(65, 4),
+      versionId: stable(66, 4),
+      code: 'BOOKING_FORM',
+      name: 'Thông tin lịch hẹn',
+      jsonSchema: {
+        type: 'object',
+        required: ['customerNeed'],
+        properties: {
+          customerNeed: { type: 'string', minLength: 1, maxLength: 1000 },
+          note: { type: 'string', maxLength: 2000 },
         },
         additionalProperties: false,
       },
@@ -767,6 +836,171 @@ async function main() {
       },
     });
   }
+
+  const bookingCustomerId = stable(90, 1);
+  const bookingServiceId = stable(91, 1);
+  const bookingServiceVersionId = stable(92, 1);
+  const bookingId = stable(93, 1);
+  const consentPolicyId = stable(94, 1);
+  const retentionPolicyId = stable(95, 1);
+  const cancellationReasonId = stable(96, 1);
+  const cancellationReasonVersionId = stable(97, 1);
+
+  await prisma.customer.upsert({
+    where: { tenantId_id: { tenantId, id: bookingCustomerId } },
+    update: { displayName: 'Khách hàng mẫu' },
+    create: {
+      tenantId,
+      id: bookingCustomerId,
+      displayName: 'Khách hàng mẫu',
+      phoneNormalized: '0900000000',
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.customerBranchAccess.upsert({
+    where: {
+      tenantId_customerId_branchId: {
+        tenantId,
+        customerId: bookingCustomerId,
+        branchId: branches[0]!.id,
+      },
+    },
+    update: { revokedAt: null },
+    create: {
+      tenantId,
+      customerId: bookingCustomerId,
+      branchId: branches[0]!.id,
+      grantedByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.serviceOffering.upsert({
+    where: { tenantId_code: { tenantId, code: 'FACIAL_BASIC' } },
+    update: {},
+    create: {
+      tenantId,
+      id: bookingServiceId,
+      code: 'FACIAL_BASIC',
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.serviceOfferingVersion.upsert({
+    where: { tenantId_id: { tenantId, id: bookingServiceVersionId } },
+    update: { name: 'Chăm sóc da cơ bản', status: 'ACTIVE' },
+    create: {
+      tenantId,
+      id: bookingServiceVersionId,
+      serviceOfferingId: bookingServiceId,
+      versionNumber: 1,
+      name: 'Chăm sóc da cơ bản',
+      status: 'ACTIVE',
+      effectiveFrom: new Date('2026-07-10T00:00:00Z'),
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.serviceBranchAvailability.upsert({
+    where: { tenantId_id: { tenantId, id: stable(98, 1) } },
+    update: { status: 'ACTIVE', effectiveTo: null },
+    create: {
+      tenantId,
+      id: stable(98, 1),
+      serviceOfferingId: bookingServiceId,
+      serviceOfferingVersionId: bookingServiceVersionId,
+      branchId: branches[0]!.id,
+      status: 'ACTIVE',
+      effectiveFrom: new Date('2026-07-10T00:00:00Z'),
+    },
+  });
+  await prisma.customerPhotoConsentPolicyVersion.upsert({
+    where: { tenantId_id: { tenantId, id: consentPolicyId } },
+    update: {},
+    create: {
+      tenantId,
+      id: consentPolicyId,
+      versionNumber: 1,
+      title: 'Đồng ý lưu ảnh khách hàng',
+      policyText: 'Khách hàng đồng ý để cơ sở lưu ảnh phục vụ ghi nhận công tour.',
+      allowedMethods: ['VERBAL', 'WRITTEN'],
+      status: 'ACTIVE',
+      effectiveFrom: new Date('2026-07-10T00:00:00Z'),
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.bookingCancellationReason.upsert({
+    where: { tenantId_code: { tenantId, code: 'CUSTOMER_REQUEST' } },
+    update: {},
+    create: {
+      tenantId,
+      id: cancellationReasonId,
+      code: 'CUSTOMER_REQUEST',
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.bookingCancellationReasonVersion.upsert({
+    where: { tenantId_id: { tenantId, id: cancellationReasonVersionId } },
+    update: { label: 'Khách yêu cầu hủy' },
+    create: {
+      tenantId,
+      id: cancellationReasonVersionId,
+      reasonId: cancellationReasonId,
+      versionNumber: 1,
+      label: 'Khách yêu cầu hủy',
+      appliesToCancellation: true,
+      appliesToReschedule: true,
+      status: 'ACTIVE',
+      effectiveFrom: new Date('2026-07-10T00:00:00Z'),
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.bookingReportDestination.upsert({
+    where: { tenantId_id: { tenantId, id: stable(99, 1) } },
+    update: { status: 'ACTIVE' },
+    create: {
+      tenantId,
+      id: stable(99, 1),
+      branchId: null,
+      reportType: 'TOMORROW_SCHEDULE',
+      chatChannelId: stable(60, 1),
+      status: 'ACTIVE',
+      effectiveFrom: new Date('2026-07-10T00:00:00Z'),
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.bookingRetentionPolicyVersion.upsert({
+    where: { tenantId_id: { tenantId, id: retentionPolicyId } },
+    update: {},
+    create: {
+      tenantId,
+      id: retentionPolicyId,
+      versionNumber: 1,
+      customerPhotoDays: 180,
+      xlsxDays: 30,
+      platformBoundsJson: { customerPhotoDaysMax: 3650, xlsxDaysMax: 365 },
+      effectiveFrom: new Date('2026-07-10T00:00:00Z'),
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
+  await prisma.booking.upsert({
+    where: { tenantId_id: { tenantId, id: bookingId } },
+    update: {},
+    create: {
+      tenantId,
+      id: bookingId,
+      branchId: branches[0]!.id,
+      customerId: bookingCustomerId,
+      serviceOfferingId: bookingServiceId,
+      serviceOfferingVersionId: bookingServiceVersionId,
+      serviceCodeSnapshot: 'FACIAL_BASIC',
+      serviceNameSnapshot: 'Chăm sóc da cơ bản',
+      assignedMembershipId: ownerMembershipId,
+      formVersionId: stable(66, 4),
+      bookingType: 'SCHEDULED',
+      scheduledStartAt: new Date('2026-07-25T02:00:00Z'),
+      businessDate: new Date('2026-07-25T00:00:00Z'),
+      timezoneSnapshot: 'Asia/Ho_Chi_Minh',
+      status: 'SCHEDULED',
+      createdByMembershipId: ownerMembershipId,
+    },
+  });
 }
 
 await main().finally(() => prisma.$disconnect());

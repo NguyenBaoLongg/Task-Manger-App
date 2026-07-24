@@ -15,4 +15,7 @@ export * from './attendance.repository.js';
 export * from './workflow.repository.js';
 export * from './penalty.repository.js';
 export * from './attendance-worker.repository.js';
+export * from './booking.repository.js';
+export * from './booking-worker.repository.js';
+export * from './export.repository.js';
 export * from './generated/prisma/client.js';

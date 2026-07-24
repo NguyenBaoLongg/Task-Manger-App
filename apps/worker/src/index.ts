@@ -8,6 +8,9 @@ import {
   KpiGovernanceRepository,
   KpiRepository,
   KpiWorkerRepository,
+  PenaltyRepository,
+  BookingWorkerRepository,
+  ExportRepository,
   createDatabaseClient,
 } from '@adsup/database';
 import pino from 'pino';
@@ -24,6 +27,9 @@ import { AttendanceScheduler } from './attendance/scheduler.js';
 import { AttendanceDayCloseRunner } from './attendance/day-close-runner.js';
 import { MonthlyAbsenceRunner } from './attendance/monthly-absence-runner.js';
 import { VideoConversionRunner } from './attendance/video-conversion-runner.js';
+import { CheckInReminderRunner } from './attendance/check-in-reminder-runner.js';
+import { MediaRetentionRunner } from './attendance/media-retention-runner.js';
+import { BookingScheduler } from './bookings/scheduler.js';
 
 const config = parseConfig(process.env);
 const logger = pino({ level: config.logLevel, redact: ['*.token', '*.secret', '*.url'] });
@@ -32,10 +38,14 @@ const metrics = new WorkerMetrics();
 const workerId = `worker-${process.pid}`;
 const workerRepository = new KpiWorkerRepository(database);
 const attendanceWorkerRepository = new AttendanceWorkerRepository(database);
+const bookingWorkerRepository = new BookingWorkerRepository(database);
+const exportRepository = new ExportRepository(database);
+const attendancePenaltyRepository = new PenaltyRepository(database);
+const attendanceActionItems = new ActionItemRepository(database);
 const closeDayService = new CloseDayService(
   new KpiRepository(database),
   workerRepository,
-  new ActionItemRepository(database),
+  attendanceActionItems,
 );
 const closeDay = new CloseDayRunner(workerRepository, closeDayService);
 const reruns = new RerunRunner(workerRepository, closeDayService);
@@ -48,9 +58,18 @@ const attendanceScheduler = new AttendanceScheduler(
       return {};
     },
   }),
-  new AttendanceDayCloseRunner(new AttendanceRepository(database)),
+  new AttendanceDayCloseRunner(
+    new AttendanceRepository(database),
+    attendancePenaltyRepository,
+    attendanceActionItems,
+  ),
   new MonthlyAbsenceRunner(attendanceWorkerRepository),
+  new CheckInReminderRunner(attendanceWorkerRepository),
+  new MediaRetentionRunner(attendanceWorkerRepository),
 );
+const bookingScheduler = new BookingScheduler();
+void bookingWorkerRepository;
+void exportRepository;
 const realtime = await createKpiRealtimeEffect({
   mode: config.realtimeBackplane,
   redisUrl: config.redisUrl,
@@ -112,6 +131,11 @@ async function tick() {
     for (const result of attendanceScheduled) {
       metrics.increment('attendance_runs_total');
       metrics.increment('attendance_processed_total', result.processed);
+    }
+    const bookingScheduled = await bookingScheduler.tick();
+    for (const result of bookingScheduled) {
+      metrics.increment('booking_runs_total');
+      metrics.increment('booking_processed_total', result.processed);
     }
     const result = await dispatcher.dispatch(workerId);
     metrics.increment('worker_ticks_total');

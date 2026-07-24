@@ -208,6 +208,9 @@ enum ActionItemType {
   KPI_SHORTFALL
   PHOTO_DEBT
   DATA_QUALITY
+  BOOKING_MISSING_STATUS
+  BOOKING_MISSING_CUSTOMER_PHOTO
+  TOUR_INCOMPLETE
 }
 
 enum KpiJobRunStatus {
@@ -1190,6 +1193,7 @@ model WorkScheduleVersion {
   businessDate          DateTime           @map("business_date") @db.Date
   shiftDefinitionId     String?            @map("shift_definition_id") @db.Uuid
   state                 ScheduleState
+  leaveDurationKind     LeaveDurationKind? @map("leave_duration_kind")
   changeKind            ScheduleChangeKind @map("change_kind")
   sourceRequestId       String?            @map("source_request_id") @db.Uuid
   sourceOffCalendarId   String?            @map("source_off_calendar_id") @db.Uuid
@@ -1231,24 +1235,24 @@ model CompanyOffCalendarVersion {
 }
 
 model VideoPolicyVersion {
-  tenantId                    String    @map("tenant_id") @db.Uuid
-  id                          String    @default(uuid()) @db.Uuid
-  scopeType                   ScopeType @map("scope_type")
-  branchId                    String?   @map("branch_id") @db.Uuid
-  versionNumber               Int       @map("version_number")
-  effectiveFromDate           DateTime  @map("effective_from_date") @db.Date
-  effectiveToDate             DateTime? @map("effective_to_date") @db.Date
-  requiresAcknowledgement     Boolean   @default(true) @map("requires_acknowledgement")
-  requiresFullBody            Boolean   @default(true) @map("requires_full_body")
-  requiresWorkArea            Boolean   @default(true) @map("requires_work_area")
-  manualReviewRequired        Boolean   @default(true) @map("manual_review_required")
-  acknowledgementText         String?   @map("acknowledgement_text") @db.Text
-  missingCheckinPenaltyMinor  BigInt    @default(50000) @map("missing_checkin_penalty_minor")
-  videoFailedPenaltyMinor     BigInt    @default(50000) @map("video_failed_penalty_minor")
-  currency                    String    @default("VND") @db.VarChar(3)
-  createdByMembershipId       String    @map("created_by_membership_id") @db.Uuid
-  reason                      String    @db.VarChar(500)
-  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenantId                   String    @map("tenant_id") @db.Uuid
+  id                         String    @default(uuid()) @db.Uuid
+  scopeType                  ScopeType @map("scope_type")
+  branchId                   String?   @map("branch_id") @db.Uuid
+  versionNumber              Int       @map("version_number")
+  effectiveFromDate          DateTime  @map("effective_from_date") @db.Date
+  effectiveToDate            DateTime? @map("effective_to_date") @db.Date
+  requiresAcknowledgement    Boolean   @default(true) @map("requires_acknowledgement")
+  requiresFullBody           Boolean   @default(true) @map("requires_full_body")
+  requiresWorkArea           Boolean   @default(true) @map("requires_work_area")
+  manualReviewRequired       Boolean   @default(true) @map("manual_review_required")
+  acknowledgementText        String?   @map("acknowledgement_text") @db.Text
+  missingCheckinPenaltyMinor BigInt    @default(50000) @map("missing_checkin_penalty_minor")
+  videoFailedPenaltyMinor    BigInt    @default(50000) @map("video_failed_penalty_minor")
+  currency                   String    @default("VND") @db.VarChar(3)
+  createdByMembershipId      String    @map("created_by_membership_id") @db.Uuid
+  reason                     String    @db.VarChar(500)
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, scopeType, branchId, versionNumber])
@@ -1257,15 +1261,15 @@ model VideoPolicyVersion {
 }
 
 model VideoPolicyAcknowledgement {
-  tenantId          String   @map("tenant_id") @db.Uuid
-  id                String   @default(uuid()) @db.Uuid
-  membershipId      String   @map("membership_id") @db.Uuid
-  policyVersionId   String   @map("policy_version_id") @db.Uuid
-  acknowledgedAt    DateTime @default(now()) @map("acknowledged_at") @db.Timestamptz(3)
-  sessionId         String?  @map("session_id") @db.Uuid
-  deviceId          String?  @map("device_id") @db.VarChar(200)
-  action            String   @db.VarChar(40)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenantId        String   @map("tenant_id") @db.Uuid
+  id              String   @default(uuid()) @db.Uuid
+  membershipId    String   @map("membership_id") @db.Uuid
+  policyVersionId String   @map("policy_version_id") @db.Uuid
+  acknowledgedAt  DateTime @default(now()) @map("acknowledged_at") @db.Timestamptz(3)
+  sessionId       String?  @map("session_id") @db.Uuid
+  deviceId        String?  @map("device_id") @db.VarChar(200)
+  action          String   @db.VarChar(40)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, membershipId, policyVersionId])
@@ -1274,22 +1278,22 @@ model VideoPolicyAcknowledgement {
 }
 
 model AttendanceEvent {
-  tenantId              String                @map("tenant_id") @db.Uuid
-  id                    String                @default(uuid()) @db.Uuid
-  membershipId          String                @map("membership_id") @db.Uuid
-  branchId              String                @map("branch_id") @db.Uuid
-  businessDate          DateTime              @map("business_date") @db.Date
-  scheduleVersionId     String                @map("schedule_version_id") @db.Uuid
-  videoPolicyVersionId  String                @map("video_policy_version_id") @db.Uuid
-  serverRecordedAt      DateTime              @default(now()) @map("server_recorded_at") @db.Timestamptz(3)
-  checkInAt             DateTime?             @map("check_in_at") @db.Timestamptz(3)
-  state                 AttendanceState
-  dayClassification     DayWorkClassification @map("day_classification")
-  classificationReason  String                @map("classification_reason") @db.VarChar(160)
-  sourceRequestId       String?               @map("source_request_id") @db.Uuid
-  correlationId         String                @map("correlation_id") @db.VarChar(100)
-  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenantId             String                @map("tenant_id") @db.Uuid
+  id                   String                @default(uuid()) @db.Uuid
+  membershipId         String                @map("membership_id") @db.Uuid
+  branchId             String                @map("branch_id") @db.Uuid
+  businessDate         DateTime              @map("business_date") @db.Date
+  scheduleVersionId    String                @map("schedule_version_id") @db.Uuid
+  videoPolicyVersionId String                @map("video_policy_version_id") @db.Uuid
+  serverRecordedAt     DateTime              @default(now()) @map("server_recorded_at") @db.Timestamptz(3)
+  checkInAt            DateTime?             @map("check_in_at") @db.Timestamptz(3)
+  state                AttendanceState
+  dayClassification    DayWorkClassification @map("day_classification")
+  classificationReason String                @map("classification_reason") @db.VarChar(160)
+  sourceRequestId      String?               @map("source_request_id") @db.Uuid
+  correlationId        String                @map("correlation_id") @db.VarChar(100)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, membershipId, businessDate])
@@ -1308,6 +1312,8 @@ model CheckInVideoAsset {
   convertedMediaObjectId String?              @map("converted_media_object_id") @db.Uuid
   processingState        VideoProcessingState @default(REQUESTED) @map("processing_state")
   attemptCount           Int                  @default(0) @map("attempt_count")
+  leaseOwner             String?              @map("lease_owner") @db.VarChar(160)
+  leaseUntil             DateTime?            @map("lease_until") @db.Timestamptz(3)
   lastSafeErrorCode      String?              @map("last_safe_error_code") @db.VarChar(100)
   requestedAt            DateTime             @default(now()) @map("requested_at") @db.Timestamptz(3)
   uploadedAt             DateTime?            @map("uploaded_at") @db.Timestamptz(3)
@@ -1318,6 +1324,7 @@ model CheckInVideoAsset {
   @@id([tenantId, id])
   @@unique([tenantId, attendanceEventId])
   @@index([tenantId, processingState, requestedAt, id])
+  @@index([tenantId, processingState, leaseUntil, id])
   @@index([tenantId, mediaObjectId])
   @@map("checkin_video_assets")
 }
@@ -1339,24 +1346,24 @@ model VideoReviewResult {
 }
 
 model LateOccurrence {
-  tenantId              String   @map("tenant_id") @db.Uuid
-  id                    String   @default(uuid()) @db.Uuid
-  attendanceEventId     String   @map("attendance_event_id") @db.Uuid
-  membershipId          String   @map("membership_id") @db.Uuid
-  branchId              String   @map("branch_id") @db.Uuid
-  businessDate          DateTime @map("business_date") @db.Date
-  shiftStartAt          DateTime @map("shift_start_at") @db.Timestamptz(3)
-  checkInAt             DateTime @map("check_in_at") @db.Timestamptz(3)
-  lateSeconds           Int      @map("late_seconds")
-  lateMinutes           Int      @map("late_minutes")
-  monthlyLateSequence   Int      @map("monthly_late_sequence")
-  firstLateExempt       Boolean  @default(false) @map("first_late_exempt")
-  after15Local          Boolean  @default(false) @map("after_15_local")
-  after18Local          Boolean  @default(false) @map("after_18_local")
-  lateNoticeRequestId   String?  @map("late_notice_request_id") @db.Uuid
-  queueImpactFlag       Boolean  @default(false) @map("queue_impact_flag")
-  policyVersionId       String   @map("policy_version_id") @db.Uuid
-  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenantId            String   @map("tenant_id") @db.Uuid
+  id                  String   @default(uuid()) @db.Uuid
+  attendanceEventId   String   @map("attendance_event_id") @db.Uuid
+  membershipId        String   @map("membership_id") @db.Uuid
+  branchId            String   @map("branch_id") @db.Uuid
+  businessDate        DateTime @map("business_date") @db.Date
+  shiftStartAt        DateTime @map("shift_start_at") @db.Timestamptz(3)
+  checkInAt           DateTime @map("check_in_at") @db.Timestamptz(3)
+  lateSeconds         Int      @map("late_seconds")
+  lateMinutes         Int      @map("late_minutes")
+  monthlyLateSequence Int      @map("monthly_late_sequence")
+  firstLateExempt     Boolean  @default(false) @map("first_late_exempt")
+  after15Local        Boolean  @default(false) @map("after_15_local")
+  after18Local        Boolean  @default(false) @map("after_18_local")
+  lateNoticeRequestId String?  @map("late_notice_request_id") @db.Uuid
+  queueImpactFlag     Boolean  @default(false) @map("queue_impact_flag")
+  policyVersionId     String   @map("policy_version_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, attendanceEventId])
@@ -1366,29 +1373,29 @@ model LateOccurrence {
 }
 
 model AttendancePenaltyPolicyVersion {
-  tenantId                         String    @map("tenant_id") @db.Uuid
-  id                               String    @default(uuid()) @db.Uuid
-  scopeType                        ScopeType @map("scope_type")
-  branchId                         String?   @map("branch_id") @db.Uuid
-  versionNumber                    Int       @map("version_number")
-  effectiveFromDate                DateTime  @map("effective_from_date") @db.Date
-  effectiveToDate                  DateTime? @map("effective_to_date") @db.Date
-  timezone                         String    @db.VarChar(64)
-  lateFixed1To15Minor              BigInt    @default(20000) @map("late_fixed_1_15_minor")
-  lateExcessPerMinuteMinor         BigInt    @default(2000) @map("late_excess_per_minute_minor")
-  lateExcessAfterMinutes           Int       @default(15) @map("late_excess_after_minutes")
-  lateMaxThresholdMinutes          Int       @default(90) @map("late_max_threshold_minutes")
-  lateMaxMinor                     BigInt    @default(200000) @map("late_max_minor")
-  lateNoNoticeMinor                BigInt    @default(100000) @map("late_no_notice_minor")
-  suddenLeaveNoNoticeMinor         BigInt    @default(50000) @map("sudden_leave_no_notice_minor")
-  suddenLeaveOverLimitMinor        BigInt    @default(100000) @map("sudden_leave_over_limit_minor")
-  leaveRuleViolationMinor          BigInt    @default(200000) @map("leave_rule_violation_minor")
-  monthlySuddenLeaveFreeDays       Decimal   @default(1) @map("monthly_sudden_leave_free_days") @db.Decimal(6, 2)
-  monthlyAbsenceNotifyThresholdDays Decimal  @default(5) @map("monthly_absence_notify_threshold_days") @db.Decimal(6, 2)
-  currency                         String    @default("VND") @db.VarChar(3)
-  createdByMembershipId            String    @map("created_by_membership_id") @db.Uuid
-  reason                           String    @db.VarChar(500)
-  createdAt                        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenantId                          String    @map("tenant_id") @db.Uuid
+  id                                String    @default(uuid()) @db.Uuid
+  scopeType                         ScopeType @map("scope_type")
+  branchId                          String?   @map("branch_id") @db.Uuid
+  versionNumber                     Int       @map("version_number")
+  effectiveFromDate                 DateTime  @map("effective_from_date") @db.Date
+  effectiveToDate                   DateTime? @map("effective_to_date") @db.Date
+  timezone                          String    @db.VarChar(64)
+  lateFixed1To15Minor               BigInt    @default(20000) @map("late_fixed_1_15_minor")
+  lateExcessPerMinuteMinor          BigInt    @default(2000) @map("late_excess_per_minute_minor")
+  lateExcessAfterMinutes            Int       @default(15) @map("late_excess_after_minutes")
+  lateMaxThresholdMinutes           Int       @default(90) @map("late_max_threshold_minutes")
+  lateMaxMinor                      BigInt    @default(200000) @map("late_max_minor")
+  lateNoNoticeMinor                 BigInt    @default(100000) @map("late_no_notice_minor")
+  suddenLeaveNoNoticeMinor          BigInt    @default(50000) @map("sudden_leave_no_notice_minor")
+  suddenLeaveOverLimitMinor         BigInt    @default(100000) @map("sudden_leave_over_limit_minor")
+  leaveRuleViolationMinor           BigInt    @default(200000) @map("leave_rule_violation_minor")
+  monthlySuddenLeaveFreeDays        Decimal   @default(1) @map("monthly_sudden_leave_free_days") @db.Decimal(6, 2)
+  monthlyAbsenceNotifyThresholdDays Decimal   @default(5) @map("monthly_absence_notify_threshold_days") @db.Decimal(6, 2)
+  currency                          String    @default("VND") @db.VarChar(3)
+  createdByMembershipId             String    @map("created_by_membership_id") @db.Uuid
+  reason                            String    @db.VarChar(500)
+  createdAt                         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, scopeType, branchId, versionNumber])
@@ -1397,21 +1404,21 @@ model AttendancePenaltyPolicyVersion {
 }
 
 model AttendanceViolation {
-  tenantId          String        @map("tenant_id") @db.Uuid
-  id                String        @default(uuid()) @db.Uuid
-  membershipId      String        @map("membership_id") @db.Uuid
-  branchId          String        @map("branch_id") @db.Uuid
-  businessDate      DateTime      @map("business_date") @db.Date
-  violationKind     ViolationKind @map("violation_kind")
-  sourceType        String        @map("source_type") @db.VarChar(80)
-  sourceId          String        @map("source_id") @db.Uuid
-  policyVersionId   String        @map("policy_version_id") @db.Uuid
-  amountMinor       BigInt        @map("amount_minor")
-  currency          String        @default("VND") @db.VarChar(3)
-  detailsJson       Json          @default("{}") @map("details_json") @db.JsonB
-  assessedAt        DateTime      @default(now()) @map("assessed_at") @db.Timestamptz(3)
-  idempotencyKey    String        @map("idempotency_key") @db.VarChar(160)
-  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenantId        String        @map("tenant_id") @db.Uuid
+  id              String        @default(uuid()) @db.Uuid
+  membershipId    String        @map("membership_id") @db.Uuid
+  branchId        String        @map("branch_id") @db.Uuid
+  businessDate    DateTime      @map("business_date") @db.Date
+  violationKind   ViolationKind @map("violation_kind")
+  sourceType      String        @map("source_type") @db.VarChar(80)
+  sourceId        String        @map("source_id") @db.Uuid
+  policyVersionId String        @map("policy_version_id") @db.Uuid
+  amountMinor     BigInt        @map("amount_minor")
+  currency        String        @default("VND") @db.VarChar(3)
+  detailsJson     Json          @default("{}") @map("details_json") @db.JsonB
+  assessedAt      DateTime      @default(now()) @map("assessed_at") @db.Timestamptz(3)
+  idempotencyKey  String        @map("idempotency_key") @db.VarChar(160)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, violationKind, sourceType, sourceId, idempotencyKey])
@@ -1421,22 +1428,22 @@ model AttendanceViolation {
 }
 
 model PenaltySettlement {
-  tenantId                String                  @map("tenant_id") @db.Uuid
-  id                      String                  @default(uuid()) @db.Uuid
-  membershipId            String                  @map("membership_id") @db.Uuid
-  branchId                String                  @map("branch_id") @db.Uuid
-  businessDate            DateTime                @map("business_date") @db.Date
-  settlementMonth         String                  @map("settlement_month") @db.VarChar(7)
-  baseAmountMinor         BigInt                  @map("base_amount_minor")
-  independentAmountMinor  BigInt                  @map("independent_amount_minor")
-  suppressedAmountMinor   BigInt                  @map("suppressed_amount_minor")
-  totalAmountMinor        BigInt                  @map("total_amount_minor")
-  currency                String                  @default("VND") @db.VarChar(3)
-  status                  PenaltySettlementStatus @default(PENDING)
-  policySnapshotJson      Json                    @default("{}") @map("policy_snapshot_json") @db.JsonB
-  componentSnapshotJson   Json                    @default("[]") @map("component_snapshot_json") @db.JsonB
-  createdAt               DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt               DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenantId               String                  @map("tenant_id") @db.Uuid
+  id                     String                  @default(uuid()) @db.Uuid
+  membershipId           String                  @map("membership_id") @db.Uuid
+  branchId               String                  @map("branch_id") @db.Uuid
+  businessDate           DateTime                @map("business_date") @db.Date
+  settlementMonth        String                  @map("settlement_month") @db.VarChar(7)
+  baseAmountMinor        BigInt                  @map("base_amount_minor")
+  independentAmountMinor BigInt                  @map("independent_amount_minor")
+  suppressedAmountMinor  BigInt                  @map("suppressed_amount_minor")
+  totalAmountMinor       BigInt                  @map("total_amount_minor")
+  currency               String                  @default("VND") @db.VarChar(3)
+  status                 PenaltySettlementStatus @default(PENDING)
+  policySnapshotJson     Json                    @default("{}") @map("policy_snapshot_json") @db.JsonB
+  componentSnapshotJson  Json                    @default("[]") @map("component_snapshot_json") @db.JsonB
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, membershipId, businessDate, settlementMonth])
@@ -1485,22 +1492,22 @@ model WorkflowDefinitionVersion {
 }
 
 model ApprovalRequest {
-  tenantId                  String        @map("tenant_id") @db.Uuid
-  id                        String        @default(uuid()) @db.Uuid
-  requestType               RequestType   @map("request_type")
-  requestedByMembershipId   String        @map("requested_by_membership_id") @db.Uuid
-  branchId                  String        @map("branch_id") @db.Uuid
-  businessDate              DateTime?     @map("business_date") @db.Date
-  scheduleVersionId         String?       @map("schedule_version_id") @db.Uuid
-  workflowVersionId         String        @map("workflow_version_id") @db.Uuid
-  status                    RequestStatus @default(SUBMITTED)
-  payloadJson               Json          @map("payload_json") @db.JsonB
-  submittedAt               DateTime      @default(now()) @map("submitted_at") @db.Timestamptz(3)
-  resolvedAt                DateTime?     @map("resolved_at") @db.Timestamptz(3)
-  reason                    String        @db.VarChar(1000)
-  idempotencyKey            String        @map("idempotency_key") @db.VarChar(160)
-  createdAt                 DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                 DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenantId                String        @map("tenant_id") @db.Uuid
+  id                      String        @default(uuid()) @db.Uuid
+  requestType             RequestType   @map("request_type")
+  requestedByMembershipId String        @map("requested_by_membership_id") @db.Uuid
+  branchId                String        @map("branch_id") @db.Uuid
+  businessDate            DateTime?     @map("business_date") @db.Date
+  scheduleVersionId       String?       @map("schedule_version_id") @db.Uuid
+  workflowVersionId       String        @map("workflow_version_id") @db.Uuid
+  status                  RequestStatus @default(SUBMITTED)
+  payloadJson             Json          @map("payload_json") @db.JsonB
+  submittedAt             DateTime      @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  resolvedAt              DateTime?     @map("resolved_at") @db.Timestamptz(3)
+  reason                  String        @db.VarChar(1000)
+  idempotencyKey          String        @map("idempotency_key") @db.VarChar(160)
+  createdAt               DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@id([tenantId, id])
   @@unique([tenantId, requestedByMembershipId, requestType, idempotencyKey])
@@ -1663,4 +1670,423 @@ model OutboxEvent {
   @@index([status, availableAt, id])
   @@index([tenantId, aggregateType, aggregateId, createdAt])
   @@map("outbox_events")
+}
+
+enum BookingType {
+  SCHEDULED
+  WALK_IN
+}
+
+enum BookingStatus {
+  SCHEDULED
+  ARRIVED
+  NO_SHOW
+  CANCELLED
+  RESCHEDULED
+}
+
+enum BookingConfigStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CustomerPhotoDebtState {
+  OPEN
+  RESOLVED
+  WAIVED
+}
+
+enum CustomerPhotoConsentMethod {
+  VERBAL
+  WRITTEN
+  OTHER
+}
+
+enum BookingReportType {
+  TOMORROW_SCHEDULE
+  TODAY_OUTCOME
+}
+
+enum BookingJobState {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  RETRYABLE
+  FAILED
+}
+
+enum ExportFormat {
+  XLSX
+}
+
+enum ExportState {
+  PENDING
+  RUNNING
+  READY
+  RETRYABLE
+  FAILED
+  EXPIRED
+}
+
+model Customer {
+  tenantId              String    @map("tenant_id") @db.Uuid
+  id                    String    @default(uuid()) @db.Uuid
+  displayName           String    @map("display_name") @db.VarChar(160)
+  phoneNormalized       String?   @map("phone_normalized") @db.VarChar(30)
+  emailNormalized       String?   @map("email_normalized") @db.VarChar(254)
+  note                  String?   @db.VarChar(1000)
+  createdByMembershipId String    @map("created_by_membership_id") @db.Uuid
+  stateVersion          Int       @default(1) @map("state_version")
+  archivedAt            DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, displayName, id])
+  @@index([tenantId, phoneNormalized])
+  @@map("customers")
+}
+
+model CustomerBranchAccess {
+  tenantId              String    @map("tenant_id") @db.Uuid
+  customerId            String    @map("customer_id") @db.Uuid
+  branchId              String    @map("branch_id") @db.Uuid
+  grantedByMembershipId String    @map("granted_by_membership_id") @db.Uuid
+  grantedAt             DateTime  @default(now()) @map("granted_at") @db.Timestamptz(3)
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  @@id([tenantId, customerId, branchId])
+  @@index([tenantId, branchId, revokedAt, customerId])
+  @@map("customer_branch_access")
+}
+
+model ServiceOffering {
+  tenantId              String   @map("tenant_id") @db.Uuid
+  id                    String   @default(uuid()) @db.Uuid
+  code                  String   @db.VarChar(50)
+  createdByMembershipId String   @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("service_offerings")
+}
+
+model ServiceOfferingVersion {
+  tenantId              String              @map("tenant_id") @db.Uuid
+  id                    String              @default(uuid()) @db.Uuid
+  serviceOfferingId     String              @map("service_offering_id") @db.Uuid
+  versionNumber         Int                 @map("version_number")
+  name                  String              @db.VarChar(160)
+  description           String?             @db.VarChar(1000)
+  status                BookingConfigStatus @default(ACTIVE)
+  effectiveFrom         DateTime            @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?           @map("effective_to") @db.Timestamptz(3)
+  createdByMembershipId String              @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, serviceOfferingId, versionNumber])
+  @@index([tenantId, status, effectiveFrom, effectiveTo])
+  @@map("service_offering_versions")
+}
+
+model ServiceBranchAvailability {
+  tenantId                 String              @map("tenant_id") @db.Uuid
+  id                       String              @default(uuid()) @db.Uuid
+  serviceOfferingId        String              @map("service_offering_id") @db.Uuid
+  serviceOfferingVersionId String              @map("service_offering_version_id") @db.Uuid
+  branchId                 String              @map("branch_id") @db.Uuid
+  status                   BookingConfigStatus @default(ACTIVE)
+  effectiveFrom            DateTime            @map("effective_from") @db.Timestamptz(3)
+  effectiveTo              DateTime?           @map("effective_to") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, serviceOfferingVersionId, branchId])
+  @@index([tenantId, branchId, status, effectiveFrom, effectiveTo])
+  @@map("service_branch_availability")
+}
+
+model Booking {
+  tenantId                 String        @map("tenant_id") @db.Uuid
+  id                       String        @default(uuid()) @db.Uuid
+  branchId                 String        @map("branch_id") @db.Uuid
+  customerId               String        @map("customer_id") @db.Uuid
+  serviceOfferingId        String        @map("service_offering_id") @db.Uuid
+  serviceOfferingVersionId String        @map("service_offering_version_id") @db.Uuid
+  serviceCodeSnapshot      String        @map("service_code_snapshot") @db.VarChar(50)
+  serviceNameSnapshot      String        @map("service_name_snapshot") @db.VarChar(160)
+  assignedMembershipId     String        @map("assigned_membership_id") @db.Uuid
+  formSubmissionId         String?       @map("form_submission_id") @db.Uuid
+  formVersionId            String?       @map("form_version_id") @db.Uuid
+  bookingType              BookingType   @map("booking_type")
+  scheduledStartAt         DateTime      @map("scheduled_start_at") @db.Timestamptz(3)
+  businessDate             DateTime      @map("business_date") @db.Date
+  timezoneSnapshot         String        @map("timezone_snapshot") @db.VarChar(80)
+  status                   BookingStatus @default(SCHEDULED)
+  stateVersion             Int           @default(1) @map("state_version")
+  rescheduledFromId        String?       @map("rescheduled_from_id") @db.Uuid
+  rescheduledToId          String?       @map("rescheduled_to_id") @db.Uuid
+  createdByMembershipId    String        @map("created_by_membership_id") @db.Uuid
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, branchId, businessDate, scheduledStartAt, id])
+  @@index([tenantId, assignedMembershipId, businessDate, status])
+  @@index([tenantId, customerId, scheduledStartAt])
+  @@map("bookings")
+}
+
+model BookingStatusTransition {
+  tenantId            String         @map("tenant_id") @db.Uuid
+  id                  String         @default(uuid()) @db.Uuid
+  bookingId           String         @map("booking_id") @db.Uuid
+  fromStatus          BookingStatus? @map("from_status")
+  toStatus            BookingStatus  @map("to_status")
+  reasonVersionId     String?        @map("reason_version_id") @db.Uuid
+  reasonCodeSnapshot  String?        @map("reason_code_snapshot") @db.VarChar(50)
+  reasonLabelSnapshot String?        @map("reason_label_snapshot") @db.VarChar(160)
+  actorMembershipId   String         @map("actor_membership_id") @db.Uuid
+  evidenceMediaId     String?        @map("evidence_media_id") @db.Uuid
+  sourceEventId       String         @map("source_event_id") @db.Uuid
+  correlationId       String         @map("correlation_id") @db.VarChar(100)
+  metadataRedacted    Json           @default("{}") @map("metadata_redacted") @db.JsonB
+  occurredAt          DateTime       @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, bookingId, sourceEventId])
+  @@index([tenantId, bookingId, occurredAt, id])
+  @@map("booking_status_transitions")
+}
+
+model BookingCancellationReason {
+  tenantId              String   @map("tenant_id") @db.Uuid
+  id                    String   @default(uuid()) @db.Uuid
+  code                  String   @db.VarChar(50)
+  createdByMembershipId String   @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("booking_cancellation_reasons")
+}
+
+model BookingCancellationReasonVersion {
+  tenantId              String              @map("tenant_id") @db.Uuid
+  id                    String              @default(uuid()) @db.Uuid
+  reasonId              String              @map("reason_id") @db.Uuid
+  versionNumber         Int                 @map("version_number")
+  label                 String              @db.VarChar(160)
+  appliesToCancellation Boolean             @default(true) @map("applies_to_cancellation")
+  appliesToReschedule   Boolean             @default(false) @map("applies_to_reschedule")
+  status                BookingConfigStatus @default(ACTIVE)
+  effectiveFrom         DateTime            @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?           @map("effective_to") @db.Timestamptz(3)
+  createdByMembershipId String              @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, reasonId, versionNumber])
+  @@index([tenantId, status, effectiveFrom, effectiveTo])
+  @@map("booking_cancellation_reason_versions")
+}
+
+model CustomerPhotoConsentPolicyVersion {
+  tenantId              String              @map("tenant_id") @db.Uuid
+  id                    String              @default(uuid()) @db.Uuid
+  versionNumber         Int                 @map("version_number")
+  title                 String              @db.VarChar(160)
+  policyText            String              @map("policy_text") @db.Text
+  allowedMethods        Json                @map("allowed_methods") @db.JsonB
+  status                BookingConfigStatus @default(ACTIVE)
+  effectiveFrom         DateTime            @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?           @map("effective_to") @db.Timestamptz(3)
+  createdByMembershipId String              @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, versionNumber])
+  @@index([tenantId, status, effectiveFrom, effectiveTo])
+  @@map("customer_photo_consent_policy_versions")
+}
+
+model CustomerPhotoConsent {
+  tenantId          String                     @map("tenant_id") @db.Uuid
+  id                String                     @default(uuid()) @db.Uuid
+  branchId          String                     @map("branch_id") @db.Uuid
+  bookingId         String                     @map("booking_id") @db.Uuid
+  customerId        String                     @map("customer_id") @db.Uuid
+  actorMembershipId String                     @map("actor_membership_id") @db.Uuid
+  method            CustomerPhotoConsentMethod
+  policyVersionId   String                     @map("policy_version_id") @db.Uuid
+  correlationId     String                     @map("correlation_id") @db.VarChar(100)
+  recordedAt        DateTime                   @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, bookingId, recordedAt])
+  @@map("customer_photo_consents")
+}
+
+model CustomerPhotoDebt {
+  tenantId          String                 @map("tenant_id") @db.Uuid
+  id                String                 @default(uuid()) @db.Uuid
+  branchId          String                 @map("branch_id") @db.Uuid
+  bookingId         String                 @map("booking_id") @db.Uuid
+  customerId        String                 @map("customer_id") @db.Uuid
+  ownerMembershipId String                 @map("owner_membership_id") @db.Uuid
+  state             CustomerPhotoDebtState @default(OPEN)
+  stateVersion      Int                    @default(1) @map("state_version")
+  actionItemId      String?                @map("action_item_id") @db.Uuid
+  resolvedMediaId   String?                @map("resolved_media_id") @db.Uuid
+  sourceEventId     String                 @map("source_event_id") @db.Uuid
+  openedAt          DateTime               @default(now()) @map("opened_at") @db.Timestamptz(3)
+  resolvedAt        DateTime?              @map("resolved_at") @db.Timestamptz(3)
+  resolutionReason  String?                @map("resolution_reason") @db.VarChar(500)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, bookingId])
+  @@index([tenantId, branchId, state, openedAt, id])
+  @@map("customer_photo_debts")
+}
+
+model TourCompletion {
+  tenantId                String    @map("tenant_id") @db.Uuid
+  id                      String    @default(uuid()) @db.Uuid
+  branchId                String    @map("branch_id") @db.Uuid
+  bookingId               String    @map("booking_id") @db.Uuid
+  customerId              String    @map("customer_id") @db.Uuid
+  performedByMembershipId String    @map("performed_by_membership_id") @db.Uuid
+  serviceOfferingId       String    @map("service_offering_id") @db.Uuid
+  customerPhotoMediaId    String    @map("customer_photo_media_id") @db.Uuid
+  formSubmissionId        String?   @map("form_submission_id") @db.Uuid
+  businessDate            DateTime  @map("business_date") @db.Date
+  completedAt             DateTime  @default(now()) @map("completed_at") @db.Timestamptz(3)
+  sourceEventId           String    @map("source_event_id") @db.Uuid
+  supersedesCompletionId  String?   @map("supersedes_completion_id") @db.Uuid
+  supersededAt            DateTime? @map("superseded_at") @db.Timestamptz(3)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, bookingId])
+  @@index([tenantId, performedByMembershipId, branchId, businessDate])
+  @@map("tour_completions")
+}
+
+model BookingReportDestination {
+  tenantId              String              @map("tenant_id") @db.Uuid
+  id                    String              @default(uuid()) @db.Uuid
+  branchId              String?             @map("branch_id") @db.Uuid
+  reportType            BookingReportType   @map("report_type")
+  chatChannelId         String              @map("chat_channel_id") @db.Uuid
+  status                BookingConfigStatus @default(ACTIVE)
+  effectiveFrom         DateTime            @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?           @map("effective_to") @db.Timestamptz(3)
+  createdByMembershipId String              @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@index([tenantId, reportType, branchId, status, effectiveFrom])
+  @@map("booking_report_destinations")
+}
+
+model BookingJobRun {
+  tenantId        String             @map("tenant_id") @db.Uuid
+  id              String             @default(uuid()) @db.Uuid
+  jobType         String             @map("job_type") @db.VarChar(80)
+  reportType      BookingReportType? @map("report_type")
+  businessDate    DateTime           @map("business_date") @db.Date
+  branchScopeJson Json               @default("[]") @map("branch_scope_json") @db.JsonB
+  state           BookingJobState    @default(PENDING)
+  attempt         Int                @default(0)
+  leaseOwner      String?            @map("lease_owner") @db.VarChar(160)
+  leaseUntil      DateTime?          @map("lease_until") @db.Timestamptz(3)
+  checkpoint      String?            @db.VarChar(500)
+  inputHash       String             @map("input_hash") @db.VarChar(64)
+  safeErrorCode   String?            @map("safe_error_code") @db.VarChar(100)
+  correlationId   String             @map("correlation_id") @db.VarChar(100)
+  startedAt       DateTime?          @map("started_at") @db.Timestamptz(3)
+  completedAt     DateTime?          @map("completed_at") @db.Timestamptz(3)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, jobType, businessDate, inputHash])
+  @@index([tenantId, state, leaseUntil, id])
+  @@map("booking_job_runs")
+}
+
+model BookingReportDelivery {
+  tenantId             String          @map("tenant_id") @db.Uuid
+  id                   String          @default(uuid()) @db.Uuid
+  runId                String          @map("run_id") @db.Uuid
+  branchId             String?         @map("branch_id") @db.Uuid
+  destinationChannelId String          @map("destination_channel_id") @db.Uuid
+  revision             Int             @default(1)
+  dedupeKey            String          @map("dedupe_key") @db.VarChar(200)
+  contentHash          String          @map("content_hash") @db.VarChar(64)
+  state                BookingJobState @default(PENDING)
+  messageId            String?         @map("message_id") @db.Uuid
+  attempt              Int             @default(0)
+  safeErrorCode        String?         @map("safe_error_code") @db.VarChar(100)
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, runId, state])
+  @@map("booking_report_deliveries")
+}
+
+model ExportRequest {
+  tenantId              String       @map("tenant_id") @db.Uuid
+  id                    String       @default(uuid()) @db.Uuid
+  requesterMembershipId String       @map("requester_membership_id") @db.Uuid
+  format                ExportFormat @default(XLSX)
+  dataTypesJson         Json         @map("data_types_json") @db.JsonB
+  dateFrom              DateTime     @map("date_from") @db.Date
+  dateTo                DateTime     @map("date_to") @db.Date
+  branchScopeJson       Json         @map("branch_scope_json") @db.JsonB
+  filterJson            Json         @map("filter_json") @db.JsonB
+  filterSchemaVersion   Int          @default(1) @map("filter_schema_version")
+  requestHash           String       @map("request_hash") @db.VarChar(64)
+  state                 ExportState  @default(PENDING)
+  progressRows          Int          @default(0) @map("progress_rows")
+  checkpoint            String?      @db.VarChar(500)
+  attempt               Int          @default(0)
+  leaseOwner            String?      @map("lease_owner") @db.VarChar(160)
+  leaseUntil            DateTime?    @map("lease_until") @db.Timestamptz(3)
+  mediaObjectId         String?      @map("media_object_id") @db.Uuid
+  checksumSha256        String?      @map("checksum_sha256") @db.VarChar(64)
+  byteSize              BigInt?      @map("byte_size")
+  expiresAt             DateTime?    @map("expires_at") @db.Timestamptz(3)
+  safeErrorCode         String?      @map("safe_error_code") @db.VarChar(100)
+  idempotencyKey        String       @map("idempotency_key") @db.VarChar(160)
+  correlationId         String       @map("correlation_id") @db.VarChar(100)
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, requesterMembershipId, idempotencyKey])
+  @@index([tenantId, state, leaseUntil, id])
+  @@index([tenantId, requesterMembershipId, createdAt, id])
+  @@map("export_requests")
+}
+
+model BookingRetentionPolicyVersion {
+  tenantId              String    @map("tenant_id") @db.Uuid
+  id                    String    @default(uuid()) @db.Uuid
+  versionNumber         Int       @map("version_number")
+  customerPhotoDays     Int       @default(180) @map("customer_photo_days")
+  xlsxDays              Int       @default(30) @map("xlsx_days")
+  platformBoundsJson    Json      @default("{}") @map("platform_bounds_json") @db.JsonB
+  effectiveFrom         DateTime  @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime? @map("effective_to") @db.Timestamptz(3)
+  createdByMembershipId String    @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, versionNumber])
+  @@index([tenantId, effectiveFrom, effectiveTo])
+  @@map("booking_retention_policy_versions")
 }

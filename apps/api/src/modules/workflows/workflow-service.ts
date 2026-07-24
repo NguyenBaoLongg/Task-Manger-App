@@ -1,5 +1,11 @@
 import { parseWorkflowPayload } from '@adsup/contracts';
-import { ProblemError, systemClock, type Clock } from '@adsup/domain';
+import {
+  ProblemError,
+  shiftStartInstant,
+  systemClock,
+  type Clock,
+  type WorkflowStepTemplate,
+} from '@adsup/domain';
 import type { WorkflowRepository } from '@adsup/database';
 import { readIdempotencyKey } from '../../http/idempotency.js';
 import type { AuthenticatedRequest } from '../../http/middleware/auth.js';
@@ -25,7 +31,7 @@ export class WorkflowService {
     branchId?: string;
     effectiveFromDate?: string;
     effectiveToDate?: string | null;
-    steps: Array<{ mode: 'SEQUENTIAL' | 'PARALLEL'; requiredApprovalCount: number }>;
+    steps: WorkflowStepTemplate[];
     reason: string;
   }) {
     return this.repository.createDefinitionVersion({
@@ -69,6 +75,45 @@ export class WorkflowService {
     });
     if (!assignment) {
       throw new ProblemError(422, 'NO_ACTIVE_BRANCH', 'Khong co co so hieu luc.');
+    }
+    if (input.requestType === 'LATE_NOTICE') {
+      if (!businessDate || typeof parsedPayload.businessDate !== 'string') {
+        throw new ProblemError(422, 'VALIDATION_FAILED', 'Ngay bao di muon khong hop le.');
+      }
+      const schedule = await this.repository.getClient().workScheduleVersion.findFirst({
+        where: {
+          tenantId: input.tenantId,
+          membershipId: input.actorMembershipId,
+          branchId: assignment.branchId,
+          businessDate,
+          supersededAt: null,
+          state: { in: ['SCHEDULED', 'ADJUSTED'] },
+        },
+        orderBy: [{ versionNumber: 'desc' }, { id: 'desc' }],
+      });
+      if (!schedule?.shiftDefinitionId) {
+        throw new ProblemError(422, 'BUSINESS_RULE_VIOLATION', 'Khong co lich ca de bao di muon.');
+      }
+      const shift = await this.repository.getClient().shiftDefinition.findUnique({
+        where: {
+          tenantId_id: { tenantId: input.tenantId, id: schedule.shiftDefinitionId },
+        },
+      });
+      if (!shift) {
+        throw new ProblemError(422, 'BUSINESS_RULE_VIOLATION', 'Khong tim thay ca lam hieu luc.');
+      }
+      const shiftStartAt = shiftStartInstant({
+        businessDate: parsedPayload.businessDate,
+        startLocalTime: shift.startLocalTime,
+        timezone: shift.timezone,
+      });
+      const noticeDeadlineAt = new Date(shiftStartAt.getTime() - 30 * 60_000);
+      const notifiedAt = this.clock.now();
+      parsedPayload.notifiedAt = notifiedAt.toISOString();
+      parsedPayload.noticeDeadlineAt = noticeDeadlineAt.toISOString();
+      parsedPayload.noticeEligibility = notifiedAt <= noticeDeadlineAt ? 'ON_TIME' : 'LATE';
+      parsedPayload.scheduleVersionId = schedule.id;
+      parsedPayload.shiftDefinitionId = shift.id;
     }
     const definitions = await this.repository.listEffectiveDefinitions({
       tenantId: input.tenantId,
@@ -119,21 +164,24 @@ export class WorkflowService {
     reason: string;
     idempotencyKey?: string;
   }) {
-    const updated = await this.repository.recordDecision({
-      tenantId: input.tenantId,
-      requestId: input.requestId,
-      approverMembershipId: input.actorMembershipId,
-      decision: input.decision,
-      reason: input.reason,
-      idempotencyKey: input.idempotencyKey ?? input.correlationId,
-      correlationId: input.correlationId,
-    });
-    await this.effects.applyFinalEffects({
-      request: updated,
-      actorMembershipId: input.actorMembershipId,
-      correlationId: input.correlationId,
-    });
-    return updated;
+    return this.repository.recordDecision(
+      {
+        tenantId: input.tenantId,
+        requestId: input.requestId,
+        approverMembershipId: input.actorMembershipId,
+        decision: input.decision,
+        reason: input.reason,
+        idempotencyKey: input.idempotencyKey ?? input.correlationId,
+        correlationId: input.correlationId,
+      },
+      async ({ request, transaction }) => {
+        await this.effects.inTransaction(transaction).applyFinalEffects({
+          request,
+          actorMembershipId: input.actorMembershipId,
+          correlationId: input.correlationId,
+        });
+      },
+    );
   }
 }
 

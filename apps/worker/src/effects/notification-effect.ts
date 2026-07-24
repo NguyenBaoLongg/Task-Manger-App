@@ -21,7 +21,7 @@ export class WebhookKpiNotificationEffect implements KpiNotificationEffectPort {
       headers: {
         authorization: `Bearer ${this.secret}`,
         'content-type': 'application/json',
-        'idempotency-key': input.eventId,
+        'idempotency-key': input.dedupeKey ?? input.eventId,
       },
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(5_000),

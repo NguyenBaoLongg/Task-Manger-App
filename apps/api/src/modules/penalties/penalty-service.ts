@@ -1,4 +1,8 @@
-import { ProblemError } from '@adsup/domain';
+import {
+  assertPenaltyPaymentTransition,
+  ProblemError,
+  type PenaltySettlementStatus,
+} from '@adsup/domain';
 import type { ActionItemRepository, PenaltyRepository } from '@adsup/database';
 
 const dateOnly = (value: string) => new Date(`${value}T00:00:00.000Z`);
@@ -71,12 +75,62 @@ export class PenaltyService {
 
   async listSettlements(input: {
     tenantId: string;
+    actorMembershipId: string;
+    canManage: boolean;
     yearMonth: string;
     branchId?: string;
     cursor?: string;
   }) {
-    const items = await this.repository.listSettlements(input);
+    const items = await this.repository.listSettlements({
+      tenantId: input.tenantId,
+      yearMonth: input.yearMonth,
+      branchId: input.branchId,
+      membershipId: input.canManage ? undefined : input.actorMembershipId,
+    });
     return { items, pageInfo: { nextCursor: null } };
+  }
+
+  getSettlement(
+    tenantId: string,
+    settlementId: string,
+  ): Promise<{
+    membershipId: string;
+    branchId: string;
+    status: PenaltySettlementStatus;
+  } | null> {
+    return this.repository.getSettlement(tenantId, settlementId);
+  }
+
+  assessLateOccurrence(input: {
+    tenantId: string;
+    lateOccurrenceId: string;
+    correlationId: string;
+  }) {
+    return this.repository.assessLateOccurrence(input);
+  }
+
+  assessVideoReviewResult(input: {
+    tenantId: string;
+    videoReviewResultId: string;
+    correlationId: string;
+  }) {
+    return this.repository.assessVideoReviewResult(input);
+  }
+
+  assessMissingCheckInEvent(input: {
+    tenantId: string;
+    attendanceEventId: string;
+    correlationId: string;
+  }) {
+    return this.repository.assessMissingCheckInEvent(input);
+  }
+
+  assessSuddenLeaveRequest(input: {
+    tenantId: string;
+    approvalRequestId: string;
+    correlationId: string;
+  }) {
+    return this.repository.assessSuddenLeaveRequest(input);
   }
 
   async transitionPayment(input: {
@@ -89,7 +143,27 @@ export class PenaltyService {
     mediaObjectId?: string;
     reason: string;
     idempotencyKey?: string;
+    canManage: boolean;
   }) {
+    const settlement = await this.repository.getSettlement(input.tenantId, input.settlementId);
+    if (!settlement) {
+      throw new ProblemError(404, 'RESOURCE_NOT_FOUND', 'Khong tim thay khoan phat.');
+    }
+    if (input.toStatus === 'SUBMITTED') {
+      if (settlement.membershipId !== input.actorMembershipId) {
+        throw new ProblemError(403, 'AUTHORIZATION_DENIED', 'Khong duoc nop thay khoan phat nay.');
+      }
+      if (!input.mediaObjectId) {
+        throw new ProblemError(422, 'VALIDATION_FAILED', 'Can dinh kem chung tu nop phat.');
+      }
+    } else if (!input.canManage) {
+      throw new ProblemError(
+        403,
+        'AUTHORIZATION_DENIED',
+        'Chi quan ly duoc phep xu ly chung tu nop phat.',
+      );
+    }
+    assertPenaltyPaymentTransition(settlement.status, input.toStatus);
     const updated = await this.repository.transitionPayment({
       tenantId: input.tenantId,
       settlementId: input.settlementId,

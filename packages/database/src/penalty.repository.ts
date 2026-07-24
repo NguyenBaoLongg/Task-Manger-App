@@ -1,9 +1,20 @@
-import type { DatabaseClient } from './client.js';
-import { settlePenaltyComponents, type ViolationKind } from '@adsup/domain';
+import { runInTransaction, type DatabaseExecutor, type DatabaseTransaction } from './client.js';
+import {
+  assertPenaltyPaymentTransition,
+  calculateLatePenalty,
+  expandLeaveDates,
+  ProblemError,
+  settlePenaltyComponents,
+  type ViolationKind,
+} from '@adsup/domain';
 import type { Prisma } from './generated/prisma/client.js';
 
 export class PenaltyRepository {
-  constructor(private readonly db: DatabaseClient) {}
+  constructor(private readonly db: DatabaseExecutor) {}
+
+  inTransaction(transaction: DatabaseTransaction) {
+    return new PenaltyRepository(transaction);
+  }
 
   getEffectiveAttendancePenaltyPolicy(
     tenantId: string,
@@ -17,7 +28,7 @@ export class PenaltyRepository {
         OR: [{ effectiveToDate: null }, { effectiveToDate: { gte: businessDate } }],
         AND: [{ OR: [{ scopeType: 'TENANT' }, { scopeType: 'BRANCH', branchId }] }],
       },
-      orderBy: [{ scopeType: 'asc' }, { versionNumber: 'desc' }, { id: 'desc' }],
+      orderBy: [{ scopeType: 'desc' }, { versionNumber: 'desc' }, { id: 'desc' }],
     });
   }
 
@@ -25,6 +36,7 @@ export class PenaltyRepository {
     tenantId: string;
     yearMonth: string;
     branchId?: string;
+    membershipId?: string;
     status?: 'PENDING' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'WAIVED' | 'REFUNDED';
     take?: number;
   }) {
@@ -33,6 +45,7 @@ export class PenaltyRepository {
         tenantId: input.tenantId,
         settlementMonth: input.yearMonth,
         branchId: input.branchId,
+        membershipId: input.membershipId,
         status: input.status,
       },
       orderBy: [{ businessDate: 'desc' }, { id: 'desc' }],
@@ -66,7 +79,7 @@ export class PenaltyRepository {
     reason: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const latest = await tx.attendancePenaltyPolicyVersion.findFirst({
         where: {
           tenantId: input.tenantId,
@@ -147,7 +160,7 @@ export class PenaltyRepository {
     idempotencyKey: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const violation = await tx.attendanceViolation.upsert({
         where: {
           tenantId_violationKind_sourceType_sourceId_idempotencyKey: {
@@ -158,7 +171,12 @@ export class PenaltyRepository {
             idempotencyKey: input.idempotencyKey,
           },
         },
-        update: {},
+        update: {
+          policyVersionId: input.policyVersionId,
+          amountMinor: input.amountMinor,
+          currency: input.currency,
+          detailsJson: (input.detailsJson ?? {}) as Prisma.InputJsonValue,
+        },
         create: {
           tenantId: input.tenantId,
           membershipId: input.membershipId,
@@ -202,6 +220,378 @@ export class PenaltyRepository {
     });
   }
 
+  async assessLateOccurrence(input: {
+    tenantId: string;
+    lateOccurrenceId: string;
+    correlationId: string;
+  }) {
+    const late = await this.db.lateOccurrence.findUnique({
+      where: { tenantId_id: { tenantId: input.tenantId, id: input.lateOccurrenceId } },
+    });
+    if (!late) return null;
+    const policy =
+      (await this.db.attendancePenaltyPolicyVersion.findUnique({
+        where: { tenantId_id: { tenantId: input.tenantId, id: late.policyVersionId } },
+      })) ??
+      (await this.getEffectiveAttendancePenaltyPolicy(
+        input.tenantId,
+        late.branchId,
+        late.businessDate,
+      ));
+    if (!policy) return null;
+    const noticeStatus = late.lateNoticeRequestId ? 'APPROVED_ON_TIME' : 'NONE';
+    const assessed = calculateLatePenalty({
+      lateMinutes: late.lateMinutes,
+      monthlyLateSequence: late.monthlyLateSequence,
+      noticeStatus,
+      policy: {
+        lateFixed1To15Minor: policy.lateFixed1To15Minor,
+        lateExcessPerMinuteMinor: policy.lateExcessPerMinuteMinor,
+        lateExcessAfterMinutes: policy.lateExcessAfterMinutes,
+        lateMaxThresholdMinutes: policy.lateMaxThresholdMinutes,
+        lateMaxMinor: policy.lateMaxMinor,
+        lateNoNoticeMinor: policy.lateNoNoticeMinor,
+        currency: 'VND',
+      },
+    });
+    if (!assessed) return null;
+    const policySnapshotJson = {
+      policyType: 'ATTENDANCE_PENALTY',
+      policyVersionId: policy.id,
+      policyVersionNumber: policy.versionNumber,
+      lateMinutes: late.lateMinutes,
+      monthlyLateSequence: late.monthlyLateSequence,
+      firstLateExempt: assessed.firstLateExempt,
+      noticeStatus,
+      discountAmountMinor: assessed.discountAmountMinor.toString(),
+    };
+    await this.recordViolation({
+      tenantId: late.tenantId,
+      membershipId: late.membershipId,
+      branchId: late.branchId,
+      businessDate: late.businessDate,
+      violationKind: 'LATE_BASE',
+      sourceType: 'LATE_OCCURRENCE',
+      sourceId: late.id,
+      policyVersionId: policy.id,
+      amountMinor: assessed.baseAmountMinor,
+      currency: 'VND',
+      detailsJson: {
+        ...policySnapshotJson,
+        component: 'LATE_BASE',
+      },
+      idempotencyKey: `late-base:${late.id}`,
+      correlationId: input.correlationId,
+    });
+    await this.recordViolation({
+      tenantId: late.tenantId,
+      membershipId: late.membershipId,
+      branchId: late.branchId,
+      businessDate: late.businessDate,
+      violationKind: 'LATE_NO_NOTICE',
+      sourceType: 'LATE_OCCURRENCE',
+      sourceId: late.id,
+      policyVersionId: policy.id,
+      amountMinor: assessed.noNoticeAmountMinor,
+      currency: 'VND',
+      detailsJson: {
+        ...policySnapshotJson,
+        component: 'LATE_NO_NOTICE',
+      },
+      idempotencyKey: `late-no-notice:${late.id}`,
+      correlationId: input.correlationId,
+    });
+    return this.upsertSettlementFromViolations({
+      tenantId: late.tenantId,
+      membershipId: late.membershipId,
+      branchId: late.branchId,
+      businessDate: late.businessDate,
+      settlementMonth: settlementMonth(late.businessDate),
+      policySnapshotJson,
+      correlationId: input.correlationId,
+    });
+  }
+
+  async assessVideoReviewResult(input: {
+    tenantId: string;
+    videoReviewResultId: string;
+    correlationId: string;
+  }) {
+    const review = await this.db.videoReviewResult.findUnique({
+      where: { tenantId_id: { tenantId: input.tenantId, id: input.videoReviewResultId } },
+    });
+    if (!review || review.reviewStatus !== 'FAILED') return null;
+    const event = await this.db.attendanceEvent.findUnique({
+      where: { tenantId_id: { tenantId: input.tenantId, id: review.attendanceEventId } },
+    });
+    if (!event) return null;
+    const policy = await this.db.videoPolicyVersion.findUnique({
+      where: { tenantId_id: { tenantId: input.tenantId, id: event.videoPolicyVersionId } },
+    });
+    if (!policy || policy.videoFailedPenaltyMinor <= 0n) return null;
+    const policySnapshotJson = {
+      policyType: 'VIDEO',
+      policyVersionId: policy.id,
+      policyVersionNumber: policy.versionNumber,
+      reviewStatus: review.reviewStatus,
+      failedCriteria: review.failedCriteriaJson,
+    };
+    await this.recordViolation({
+      tenantId: event.tenantId,
+      membershipId: event.membershipId,
+      branchId: event.branchId,
+      businessDate: event.businessDate,
+      violationKind: 'VIDEO_STANDARD_FAILED',
+      sourceType: 'VIDEO_REVIEW_RESULT',
+      sourceId: review.id,
+      policyVersionId: policy.id,
+      amountMinor: policy.videoFailedPenaltyMinor,
+      currency: 'VND',
+      detailsJson: policySnapshotJson,
+      idempotencyKey: `video-review-failed:${review.id}`,
+      correlationId: input.correlationId,
+    });
+    return this.upsertSettlementFromViolations({
+      tenantId: event.tenantId,
+      membershipId: event.membershipId,
+      branchId: event.branchId,
+      businessDate: event.businessDate,
+      settlementMonth: settlementMonth(event.businessDate),
+      policySnapshotJson,
+      correlationId: input.correlationId,
+    });
+  }
+
+  async assessMissingCheckInEvent(input: {
+    tenantId: string;
+    attendanceEventId: string;
+    correlationId: string;
+  }) {
+    const event = await this.db.attendanceEvent.findUnique({
+      where: { tenantId_id: { tenantId: input.tenantId, id: input.attendanceEventId } },
+    });
+    if (
+      !event ||
+      event.state !== 'MISSING_CHECK_IN' ||
+      event.dayClassification !== 'NON_WORKED_NO_CHECKIN'
+    ) {
+      return null;
+    }
+    const policy = await this.db.videoPolicyVersion.findUnique({
+      where: { tenantId_id: { tenantId: input.tenantId, id: event.videoPolicyVersionId } },
+    });
+    if (!policy || policy.missingCheckinPenaltyMinor <= 0n) return null;
+    const policySnapshotJson = {
+      policyType: 'VIDEO',
+      policyVersionId: policy.id,
+      policyVersionNumber: policy.versionNumber,
+      reason: event.classificationReason,
+    };
+    await this.recordViolation({
+      tenantId: event.tenantId,
+      membershipId: event.membershipId,
+      branchId: event.branchId,
+      businessDate: event.businessDate,
+      violationKind: 'MISSING_CHECK_IN',
+      sourceType: 'ATTENDANCE_EVENT',
+      sourceId: event.id,
+      policyVersionId: policy.id,
+      amountMinor: policy.missingCheckinPenaltyMinor,
+      currency: 'VND',
+      detailsJson: policySnapshotJson,
+      idempotencyKey: `missing-checkin:${event.id}`,
+      correlationId: input.correlationId,
+    });
+    return this.upsertSettlementFromViolations({
+      tenantId: event.tenantId,
+      membershipId: event.membershipId,
+      branchId: event.branchId,
+      businessDate: event.businessDate,
+      settlementMonth: settlementMonth(event.businessDate),
+      policySnapshotJson,
+      correlationId: input.correlationId,
+    });
+  }
+
+  async assessSuddenLeaveRequest(input: {
+    tenantId: string;
+    approvalRequestId: string;
+    correlationId: string;
+  }) {
+    const request = await this.db.approvalRequest.findUnique({
+      where: { tenantId_id: { tenantId: input.tenantId, id: input.approvalRequestId } },
+    });
+    if (!request || request.status !== 'APPROVED' || request.requestType !== 'SUDDEN_LEAVE') {
+      return [];
+    }
+    const payload = readLeavePayload(request.payloadJson);
+    if (!payload) return [];
+    const dates = expandLeaveDates(payload).map((date) => new Date(`${date}T00:00:00.000Z`));
+    const settlements = [];
+    for (const businessDate of dates) {
+      const policy = await this.getEffectiveAttendancePenaltyPolicy(
+        request.tenantId,
+        request.branchId,
+        businessDate,
+      );
+      if (!policy) continue;
+      const policySnapshotJson = {
+        policyType: 'ATTENDANCE_PENALTY',
+        policyVersionId: policy.id,
+        policyVersionNumber: policy.versionNumber,
+        requestType: request.requestType,
+        notifiedCompanyChat: Boolean(payload.notifiedCompanyChat),
+      };
+      let hasViolation = false;
+      if (!payload.notifiedCompanyChat) {
+        await this.recordViolation({
+          tenantId: request.tenantId,
+          membershipId: request.requestedByMembershipId,
+          branchId: request.branchId,
+          businessDate,
+          violationKind: 'SUDDEN_LEAVE_NO_NOTICE',
+          sourceType: 'APPROVAL_REQUEST',
+          sourceId: request.id,
+          policyVersionId: policy.id,
+          amountMinor: policy.suddenLeaveNoNoticeMinor,
+          currency: 'VND',
+          detailsJson: { ...policySnapshotJson, component: 'SUDDEN_LEAVE_NO_NOTICE' },
+          idempotencyKey: `sudden-leave-no-notice:${request.id}:${dateKey(businessDate)}`,
+          correlationId: input.correlationId,
+        });
+        hasViolation = true;
+      }
+      const sequence = await this.suddenLeaveSequenceInMonth({
+        tenantId: request.tenantId,
+        membershipId: request.requestedByMembershipId,
+        branchId: request.branchId,
+        businessDate,
+      });
+      if (sequence > Number(policy.monthlySuddenLeaveFreeDays.toString())) {
+        await this.recordViolation({
+          tenantId: request.tenantId,
+          membershipId: request.requestedByMembershipId,
+          branchId: request.branchId,
+          businessDate,
+          violationKind: 'SUDDEN_LEAVE_OVER_LIMIT',
+          sourceType: 'APPROVAL_REQUEST',
+          sourceId: request.id,
+          policyVersionId: policy.id,
+          amountMinor: policy.suddenLeaveOverLimitMinor,
+          currency: 'VND',
+          detailsJson: {
+            ...policySnapshotJson,
+            component: 'SUDDEN_LEAVE_OVER_LIMIT',
+            monthlySequence: sequence,
+          },
+          idempotencyKey: `sudden-leave-over-limit:${request.id}:${dateKey(businessDate)}`,
+          correlationId: input.correlationId,
+        });
+        hasViolation = true;
+      }
+      if (hasViolation) {
+        settlements.push(
+          await this.upsertSettlementFromViolations({
+            tenantId: request.tenantId,
+            membershipId: request.requestedByMembershipId,
+            branchId: request.branchId,
+            businessDate,
+            settlementMonth: settlementMonth(businessDate),
+            policySnapshotJson,
+            correlationId: input.correlationId,
+          }),
+        );
+      }
+    }
+    return settlements;
+  }
+
+  async assessLeaveRuleViolation(input: {
+    tenantId: string;
+    membershipId: string;
+    branchId: string;
+    businessDate: Date;
+    sourceType: string;
+    sourceId: string;
+    policyVersionId?: string;
+    correlationId: string;
+  }) {
+    const policy = input.policyVersionId
+      ? await this.db.attendancePenaltyPolicyVersion.findUnique({
+          where: { tenantId_id: { tenantId: input.tenantId, id: input.policyVersionId } },
+        })
+      : await this.getEffectiveAttendancePenaltyPolicy(
+          input.tenantId,
+          input.branchId,
+          input.businessDate,
+        );
+    if (!policy) return null;
+    const policySnapshotJson = {
+      policyType: 'ATTENDANCE_PENALTY',
+      policyVersionId: policy.id,
+      policyVersionNumber: policy.versionNumber,
+      component: 'LEAVE_RULE_VIOLATION',
+    };
+    await this.recordViolation({
+      tenantId: input.tenantId,
+      membershipId: input.membershipId,
+      branchId: input.branchId,
+      businessDate: input.businessDate,
+      violationKind: 'LEAVE_RULE_VIOLATION',
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      policyVersionId: policy.id,
+      amountMinor: policy.leaveRuleViolationMinor,
+      currency: 'VND',
+      detailsJson: policySnapshotJson,
+      idempotencyKey: `leave-rule:${input.sourceType}:${input.sourceId}:${dateKey(input.businessDate)}`,
+      correlationId: input.correlationId,
+    });
+    return this.upsertSettlementFromViolations({
+      tenantId: input.tenantId,
+      membershipId: input.membershipId,
+      branchId: input.branchId,
+      businessDate: input.businessDate,
+      settlementMonth: settlementMonth(input.businessDate),
+      policySnapshotJson,
+      correlationId: input.correlationId,
+    });
+  }
+
+  private async suddenLeaveSequenceInMonth(input: {
+    tenantId: string;
+    membershipId: string;
+    branchId: string;
+    businessDate: Date;
+  }) {
+    const yearMonth = settlementMonth(input.businessDate);
+    const monthStart = new Date(`${yearMonth}-01T00:00:00.000Z`);
+    const monthEnd = new Date(monthStart);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+    const requests = await this.db.approvalRequest.findMany({
+      where: {
+        tenantId: input.tenantId,
+        requestedByMembershipId: input.membershipId,
+        branchId: input.branchId,
+        requestType: 'SUDDEN_LEAVE',
+        status: 'APPROVED',
+        OR: [{ businessDate: null }, { businessDate: { lt: monthEnd } }],
+      },
+      orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+    });
+    const dates = new Set<string>();
+    for (const request of requests) {
+      const payload = readLeavePayload(request.payloadJson);
+      if (!payload) continue;
+      for (const date of expandLeaveDates(payload)) {
+        if (date.startsWith(yearMonth) && new Date(`${date}T00:00:00.000Z`) <= input.businessDate) {
+          dates.add(date);
+        }
+      }
+    }
+    return dates.size;
+  }
+
   async upsertSettlementFromViolations(input: {
     tenantId: string;
     membershipId: string;
@@ -232,7 +622,7 @@ export class PenaltyRepository {
       ...component,
       amountMinor: component.amountMinor.toString(),
     }));
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const settlement = await tx.penaltySettlement.upsert({
         where: {
           tenantId_membershipId_businessDate_settlementMonth: {
@@ -277,7 +667,7 @@ export class PenaltyRepository {
           tenantId: input.tenantId,
           aggregateType: 'PENALTY_SETTLEMENT',
           aggregateId: settlement.id,
-          eventType: 'attendance.penalty-settlement.updated',
+          eventType: 'attendance.penalty.settled',
           dedupeKey: `attendance-penalty-settlement:${settlement.id}:${settlement.updatedAt.getTime()}`,
           payloadRedacted: {
             settlementId: settlement.id,
@@ -304,7 +694,7 @@ export class PenaltyRepository {
     idempotencyKey: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       const existing = await tx.penaltyPaymentTransition.findUnique({
         where: {
           tenantId_actorMembershipId_idempotencyKey: {
@@ -322,6 +712,7 @@ export class PenaltyRepository {
       const settlement = await tx.penaltySettlement.findUniqueOrThrow({
         where: { tenantId_id: { tenantId: input.tenantId, id: input.settlementId } },
       });
+      assertPenaltyPaymentTransition(settlement.status, input.toStatus);
       await tx.penaltyPaymentTransition.create({
         data: {
           tenantId: input.tenantId,
@@ -335,9 +726,19 @@ export class PenaltyRepository {
           idempotencyKey: input.idempotencyKey,
         },
       });
-      const updated = await tx.penaltySettlement.update({
-        where: { tenantId_id: { tenantId: input.tenantId, id: settlement.id } },
+      const transitioned = await tx.penaltySettlement.updateMany({
+        where: {
+          tenantId: input.tenantId,
+          id: settlement.id,
+          status: settlement.status,
+        },
         data: { status: input.toStatus },
+      });
+      if (transitioned.count !== 1) {
+        throw new ProblemError(409, 'CONFLICT', 'Khoan phat da duoc xu ly boi yeu cau khac.');
+      }
+      const updated = await tx.penaltySettlement.findUniqueOrThrow({
+        where: { tenantId_id: { tenantId: input.tenantId, id: settlement.id } },
       });
       await tx.auditEvent.create({
         data: {
@@ -357,7 +758,7 @@ export class PenaltyRepository {
           tenantId: input.tenantId,
           aggregateType: 'PENALTY_SETTLEMENT',
           aggregateId: settlement.id,
-          eventType: 'attendance.penalty-payment.transitioned',
+          eventType: 'attendance.penalty.payment-transitioned',
           dedupeKey: `attendance-penalty-payment:${input.tenantId}:${input.idempotencyKey}`,
           payloadRedacted: {
             settlementId: settlement.id,
@@ -384,4 +785,31 @@ function isIndependentViolation(kind: ViolationKind) {
     'SUDDEN_LEAVE_OVER_LIMIT',
     'LEAVE_RULE_VIOLATION',
   ].includes(kind);
+}
+
+function settlementMonth(date: Date) {
+  return date.toISOString().slice(0, 7);
+}
+
+function dateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function readLeavePayload(value: Prisma.JsonValue) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const payload = value as Record<string, unknown>;
+  if (
+    !['FULL_DAY', 'MORNING_HALF', 'DATE_RANGE'].includes(String(payload.durationKind)) ||
+    typeof payload.startDate !== 'string' ||
+    typeof payload.endDate !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    durationKind: payload.durationKind as 'FULL_DAY' | 'MORNING_HALF' | 'DATE_RANGE',
+    startDate: payload.startDate,
+    endDate: payload.endDate,
+    notifiedCompanyChat:
+      typeof payload.notifiedCompanyChat === 'boolean' ? payload.notifiedCompanyChat : undefined,
+  };
 }
