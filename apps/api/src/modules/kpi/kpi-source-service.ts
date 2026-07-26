@@ -17,6 +17,20 @@ export interface AttendanceKpiSourceReader {
   } | null>;
 }
 
+export interface BookingTourKpiSourceReader {
+  getCompletedTourCount(input: {
+    tenantId: string;
+    membershipId: string;
+    branchId: string;
+    businessDate: string;
+    asOf: string;
+  }): Promise<{
+    value: number | null;
+    sourceFreshnessAt: string;
+    sourceRefs: Array<{ type: 'TOUR_COMPLETION'; id: string; occurredAt: string }>;
+  }>;
+}
+
 function readJsonPointer(value: unknown, pointer: string): unknown {
   if (pointer === '') return value;
   return pointer
@@ -33,6 +47,7 @@ export class KpiSourceService {
   constructor(
     private readonly domainSource: KpiSourcePort,
     private readonly attendanceSource?: AttendanceKpiSourceReader,
+    private readonly bookingTourSource?: BookingTourKpiSourceReader,
   ) {}
 
   async read(input: {
@@ -96,6 +111,33 @@ export class KpiSourceService {
           dayClassification: snapshot.dayClassification,
           scheduleVersionId: snapshot.scheduleVersionId,
           policyVersionId: snapshot.policyVersionId,
+        }),
+      };
+    }
+    if (
+      input.mapping.sourceType === 'DOMAIN_ADAPTER' &&
+      input.mapping.adapterCode === 'BOOKING_COMPLETED_TOURS'
+    ) {
+      const snapshot = await this.bookingTourSource?.getCompletedTourCount({
+        tenantId: input.tenantId,
+        membershipId: input.membershipId,
+        branchId: input.branchId,
+        businessDate: input.businessDate,
+        asOf: new Date().toISOString(),
+      });
+      if (!snapshot || snapshot.value === null) return null;
+      const sourceId = snapshot.sourceRefs.at(-1)?.id ?? input.mapping.id;
+      return {
+        sourceType: 'DOMAIN' as const,
+        sourceId,
+        observedAt: new Date(snapshot.sourceFreshnessAt),
+        value: String(snapshot.value),
+        unit: 'TOUR',
+        inputDigest: kpiDigest({
+          mappingId: input.mapping.id,
+          value: snapshot.value,
+          sourceFreshnessAt: snapshot.sourceFreshnessAt,
+          sourceRefs: snapshot.sourceRefs,
         }),
       };
     }

@@ -10,6 +10,7 @@ import {
   KpiWorkerRepository,
   PenaltyRepository,
   BookingWorkerRepository,
+  ChatNotificationsRepository,
   ExportRepository,
   createDatabaseClient,
 } from '@adsup/database';
@@ -29,7 +30,19 @@ import { MonthlyAbsenceRunner } from './attendance/monthly-absence-runner.js';
 import { VideoConversionRunner } from './attendance/video-conversion-runner.js';
 import { CheckInReminderRunner } from './attendance/check-in-reminder-runner.js';
 import { MediaRetentionRunner } from './attendance/media-retention-runner.js';
-import { BookingScheduler } from './bookings/scheduler.js';
+import {
+  BookingReportSchedulerRunner,
+  BookingRetentionSchedulerRunner,
+  BookingScheduler,
+} from './bookings/scheduler.js';
+import { PhotoDebtRunner } from './bookings/photo-debt-runner.js';
+import { BookingActionItemRunner } from './bookings/action-item-runner.js';
+import { BookingReportRunner } from './bookings/report-runner.js';
+import { ChatBookingReportDelivery } from './bookings/report-delivery.js';
+import { ExportRunner } from './exports/export-runner.js';
+import { LocalExportStorage } from './exports/export-storage.js';
+import { BookingRetentionRunner } from './bookings/retention-runner.js';
+import { createBookingRetentionObjectStorage } from './storage/booking-retention-storage.js';
 
 const config = parseConfig(process.env);
 const logger = pino({ level: config.logLevel, redact: ['*.token', '*.secret', '*.url'] });
@@ -39,7 +52,17 @@ const workerId = `worker-${process.pid}`;
 const workerRepository = new KpiWorkerRepository(database);
 const attendanceWorkerRepository = new AttendanceWorkerRepository(database);
 const bookingWorkerRepository = new BookingWorkerRepository(database);
+const bookingReportRunner = new BookingReportRunner(
+  bookingWorkerRepository,
+  new ChatBookingReportDelivery(new ChatNotificationsRepository(database)),
+);
 const exportRepository = new ExportRepository(database);
+const localObjectStorage = new LocalExportStorage();
+const exportRunner = new ExportRunner(exportRepository, localObjectStorage);
+const bookingRetentionRunner = new BookingRetentionRunner(
+  bookingWorkerRepository,
+  createBookingRetentionObjectStorage(config),
+);
 const attendancePenaltyRepository = new PenaltyRepository(database);
 const attendanceActionItems = new ActionItemRepository(database);
 const closeDayService = new CloseDayService(
@@ -67,9 +90,22 @@ const attendanceScheduler = new AttendanceScheduler(
   new CheckInReminderRunner(attendanceWorkerRepository),
   new MediaRetentionRunner(attendanceWorkerRepository),
 );
-const bookingScheduler = new BookingScheduler();
-void bookingWorkerRepository;
-void exportRepository;
+const bookingScheduler = new BookingScheduler([
+  new BookingActionItemRunner(bookingWorkerRepository),
+  new BookingReportSchedulerRunner(bookingWorkerRepository, bookingReportRunner),
+  new BookingRetentionSchedulerRunner(bookingWorkerRepository, bookingRetentionRunner),
+]);
+async function runExports() {
+  const jobs = await exportRepository.listRunnableExports({ limit: 10 });
+  for (const job of jobs) {
+    try {
+      await exportRunner.run({ tenantId: job.tenantId, exportId: job.id, workerId });
+      metrics.increment('booking_exports_completed_total');
+    } catch {
+      metrics.increment('booking_exports_failed_total');
+    }
+  }
+}
 const realtime = await createKpiRealtimeEffect({
   mode: config.realtimeBackplane,
   redisUrl: config.redisUrl,
@@ -85,6 +121,8 @@ const dispatcher = new OutboxDispatcher(
   new KpiGovernanceRepository(database),
   realtime.effect,
   notifications,
+  10,
+  new PhotoDebtRunner(bookingWorkerRepository),
 );
 const port = config.port + 1;
 const server = createServer(async (request, response) => {
@@ -137,6 +175,7 @@ async function tick() {
       metrics.increment('booking_runs_total');
       metrics.increment('booking_processed_total', result.processed);
     }
+    await runExports();
     const result = await dispatcher.dispatch(workerId);
     metrics.increment('worker_ticks_total');
     metrics.increment('outbox_sent_total', result.sent);

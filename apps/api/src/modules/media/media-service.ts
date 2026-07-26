@@ -3,7 +3,8 @@ import { ProblemError, type ObjectStoragePort } from '@adsup/domain';
 import type { MediaRepository, OrganizationRbacRepository } from '@adsup/database';
 
 const allowedContentTypes = /^(image\/(jpeg|png|webp)|video\/mp4|application\/pdf)$/;
-const sensitiveMediaLogKeys = /url|objectkey|bucket|token|secret|checksum/i;
+const sensitiveMediaLogKeys =
+  /url|objectkey|bucket|token|secret|checksum|customer|displayname|phone|email|note/i;
 
 export function redactMediaForLog(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
@@ -26,6 +27,7 @@ export class MediaService {
     branchId?: string | null;
     sourceType?: string;
     sourceId?: string | null;
+    consentId?: string;
     purpose: string;
     contentType: string;
     byteSize: number;
@@ -44,7 +46,34 @@ export class MediaService {
         'VALIDATION_FAILED',
         'Loại, kích thước hoặc checksum media không hợp lệ.',
       );
-    if (input.sourceId) {
+    const customerPhotoRequest = input.purpose === 'CUSTOMER_BOOKING_PHOTO';
+    if (customerPhotoRequest) {
+      if (
+        input.sourceType !== 'BOOKING' ||
+        !input.sourceId ||
+        !input.branchId ||
+        !input.consentId
+      ) {
+        throw new ProblemError(
+          422,
+          'BUSINESS_RULE_VIOLATION',
+          'Ảnh khách cần lịch hẹn, cơ sở và đồng ý chụp ảnh hợp lệ.',
+        );
+      }
+      const authorization = await this.repository.getCustomerPhotoAuthorization({
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        bookingId: input.sourceId,
+        consentId: input.consentId,
+      });
+      if (!authorization) {
+        throw new ProblemError(
+          422,
+          'BUSINESS_RULE_VIOLATION',
+          'Đồng ý chụp ảnh không hợp lệ cho lịch hẹn này.',
+        );
+      }
+    } else if (input.sourceId) {
       if (!input.sourceType)
         throw new ProblemError(422, 'VALIDATION_FAILED', 'sourceType là bắt buộc khi có sourceId.');
       const source = await this.repository.getSource(
@@ -85,6 +114,7 @@ export class MediaService {
       sourceType: input.sourceType ?? 'UNATTACHED',
       sourceId: input.sourceId,
       purpose: input.purpose,
+      consentId: input.consentId,
       storageProvider: 's3-compatible',
       bucket: this.bucket,
       objectKey,

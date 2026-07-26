@@ -7,6 +7,15 @@ export class OutboxDispatcher {
     private readonly realtime: KpiRealtimeEffectPort,
     private readonly notifications: KpiNotificationEffectPort,
     private readonly maxAttempts = 10,
+    private readonly photoDebt?: {
+      handle(event: {
+        id: string;
+        tenantId: string;
+        eventType: string;
+        correlationId: string;
+        payloadRedacted: unknown;
+      }): Promise<unknown>;
+    },
   ) {}
 
   async dispatch(workerId: string, now = new Date(), limit = 100) {
@@ -28,6 +37,9 @@ export class OutboxDispatcher {
             actionItemId: row.aggregateId,
             stateVersion: Number(payload.stateVersion ?? 1),
           });
+        }
+        if (row.eventType === 'media.ready.v1') {
+          await this.photoDebt?.handle(row);
         }
         if (row.eventType === 'kpi.progress.changed') {
           await this.realtime.publishProgressChanged({

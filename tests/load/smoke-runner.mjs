@@ -7,3 +7,4 @@ for (const marker of ['constant-vus', 'http_req_failed', 'p(95)<500', '/health/l
 console.log('LOAD_SMOKE_SCRIPT_OK');
 await import('./kpi-smoke-runner.mjs');
 await import('./timekeeping-smoke-runner.mjs');
+await import('./booking-smoke-runner.mjs');

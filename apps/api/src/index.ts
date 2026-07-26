@@ -36,6 +36,7 @@ import { FormService } from './modules/forms/form-service.js';
 import { ChatService } from './modules/chat/chat-service.js';
 import { MediaService } from './modules/media/media-service.js';
 import { MemoryObjectStorage, S3ObjectStorage } from './modules/media/s3-object-storage.js';
+import { LocalExportDownloadStorage } from './modules/bookings/export-local-storage.js';
 import { createSocketGateway } from './realtime/socket-gateway.js';
 import { configureBackplane } from './realtime/backplane.js';
 import { Metrics, createLogger } from './observability/index.js';
@@ -57,6 +58,13 @@ import { OffCalendarService } from './modules/attendance/off-calendar-service.js
 import { WorkflowEffects } from './modules/workflows/workflow-effects.js';
 import { WorkflowService } from './modules/workflows/workflow-service.js';
 import { PenaltyService } from './modules/penalties/penalty-service.js';
+import { CustomerService } from './modules/bookings/customer-service.js';
+import { BookingService } from './modules/bookings/booking-service.js';
+import { ArrivalService } from './modules/bookings/arrival-service.js';
+import { BookingKpiSourceService } from './modules/bookings/booking-kpi-source-service.js';
+import { BookingConfigService } from './modules/bookings/booking-config-service.js';
+import { BookingReportService } from './modules/bookings/booking-report-service.js';
+import { ExportService } from './modules/bookings/export-service.js';
 
 const config = parseConfig(process.env);
 const logger = createLogger(config);
@@ -71,6 +79,7 @@ const auditRepo = new AuditRepository(database);
 const governance = new GovernanceRepository(database, config.jwtAccessSecret, metrics);
 const kpiRepo = new KpiRepository(database);
 const attendanceRepo = new AttendanceRepository(database);
+const bookingRepo = new BookingRepository(database);
 const penaltyRepo = new PenaltyRepository(database);
 const kpiConfigService = new KpiConfigService(kpiRepo);
 const kpiPolicyService = new KpiPolicyService(kpiRepo);
@@ -85,6 +94,7 @@ const kpiSourceService = new KpiSourceService(
     },
   },
   attendanceRepo,
+  new BookingKpiSourceService(bookingRepo),
 );
 const kpiEvidenceService = new KpiEvidenceService(
   new KpiEvidenceRepository(database),
@@ -114,8 +124,40 @@ const workflowService = new WorkflowService(
 );
 const penaltyService = new PenaltyService(penaltyRepo, actionItemRepo);
 const attendanceWorkerRepo = new AttendanceWorkerRepository(database);
-const bookingRepo = new BookingRepository(database);
+const customerService = new CustomerService(bookingRepo, rbacRepo);
+const bookingService = new BookingService(bookingRepo, rbacRepo, new FormValidator(), metrics);
+const bookingConfigService = new BookingConfigService(bookingRepo, rbacRepo);
 const bookingWorkerRepo = new BookingWorkerRepository(database);
+type BookingReportDestinationInput = {
+  tenantId: string;
+  actorMembershipId: string;
+  correlationId: string;
+  items: Array<{
+    branchId?: string;
+    reportType: 'TOMORROW_SCHEDULE' | 'TODAY_OUTCOME';
+    chatChannelId: string;
+  }>;
+};
+type BookingReportRerunInput = {
+  tenantId: string;
+  actorMembershipId: string;
+  correlationId: string;
+  reportType: 'TOMORROW_SCHEDULE' | 'TODAY_OUTCOME';
+  businessDate: Date;
+  branchIds?: string[];
+  reason: string;
+};
+const bookingReportService = new BookingReportService(
+  {
+    listBookingReportDestinations: (input: { tenantId: string }) =>
+      bookingRepo.listBookingReportDestinations(input),
+    replaceBookingReportDestinations: (input: BookingReportDestinationInput) =>
+      bookingRepo.replaceBookingReportDestinations(input),
+    enqueueReportRerun: (input: BookingReportRerunInput) =>
+      bookingWorkerRepo.enqueueReportRerun(input),
+  },
+  rbacRepo,
+);
 const exportRepo = new ExportRepository(database);
 const notImplemented = () => {
   throw new ProblemError(
@@ -125,7 +167,6 @@ const notImplemented = () => {
   );
 };
 void attendanceWorkerRepo;
-void bookingRepo;
 void bookingWorkerRepo;
 void exportRepo;
 void notImplemented;
@@ -159,6 +200,8 @@ const storage =
   config.objectStorageDriver === 's3'
     ? new S3ObjectStorage(config.s3.bucket, config.s3)
     : new MemoryObjectStorage();
+const exportDownloadStorage =
+  config.objectStorageDriver === 's3' ? storage : new LocalExportDownloadStorage();
 const mediaService = new MediaService(
   mediaRepo,
   storage,
@@ -167,6 +210,8 @@ const mediaService = new MediaService(
   rbacRepo,
   metrics,
 );
+const exportService = new ExportService(exportRepo, rbacRepo, exportDownloadStorage);
+const arrivalService = new ArrivalService(bookingRepo, rbacRepo, new FormValidator(), mediaService);
 
 const app = createApp({
   config,
@@ -206,9 +251,13 @@ const app = createApp({
   penalties: {
     penaltyService,
   },
-  bookings: {},
-  bookingConfig: {},
-  bookingExports: {},
+  bookings: {
+    customerService,
+    bookingService,
+    arrivalService,
+  },
+  bookingConfig: { configService: bookingConfigService, reportService: bookingReportService },
+  bookingExports: { exportService },
   metrics,
   readiness: async () => {
     try {

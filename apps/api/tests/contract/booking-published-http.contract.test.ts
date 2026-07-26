@@ -26,4 +26,70 @@ describe('Module 4 published HTTP shell', () => {
     expect(response.status).toBe(401);
     expect(response.body).toMatchObject({ code: 'AUTHENTICATION_REQUIRED' });
   });
+
+  it('executes the US1 customer, service catalog and booking routes', async () => {
+    const calls: string[] = [];
+    const customerService = {
+      list: async () => ({ items: [], nextCursor: null }),
+      get: async () => ({ id: bookingId, branchIds: [tenantId] }),
+      create: async () => ({ id: bookingId, branchIds: [tenantId] }),
+      update: async () => ({ id: bookingId, stateVersion: 2, branchIds: [tenantId] }),
+    };
+    const bookingService = {
+      listEffectiveServices: async () => [],
+      list: async () => ({ items: [], nextCursor: null }),
+      get: async () => ({ id: bookingId, transitions: [] }),
+      createScheduled: async () => {
+        calls.push('createScheduled');
+        return { id: bookingId, status: 'SCHEDULED' };
+      },
+    };
+    const app = createApp(
+      dependencies({
+        bookings: { customerService, bookingService } as never,
+      }),
+    );
+    const authorized = (method: string, path: string) =>
+      send(app, method, path)
+        .set('Authorization', 'Bearer valid-test-token')
+        .set('idempotency-key', 'booking-us1-contract-key');
+
+    expect((await authorized('get', `/v1/tenants/${tenantId}/customers`)).status).toBe(200);
+    expect(
+      (
+        await authorized('post', `/v1/tenants/${tenantId}/customers`).send({
+          displayName: 'Khach A',
+          branchIds: [tenantId],
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await authorized('patch', `/v1/tenants/${tenantId}/customers/${bookingId}`).send({
+          expectedStateVersion: 1,
+          displayName: 'Khach B',
+        })
+      ).status,
+    ).toBe(200);
+    expect((await authorized('get', `/v1/tenants/${tenantId}/booking-services`)).status).toBe(200);
+    expect((await authorized('get', `/v1/tenants/${tenantId}/bookings`)).status).toBe(200);
+    expect(
+      (
+        await authorized('post', `/v1/tenants/${tenantId}/bookings`).send({
+          branchId: tenantId,
+          customerId: bookingId,
+          serviceOfferingId: bookingId,
+          assignedMembershipId: bookingId,
+          scheduledStartAt: '2026-07-25T09:00:00.000Z',
+          formTemplateId: bookingId,
+          formVersionId: bookingId,
+          formData: {},
+        })
+      ).status,
+    ).toBe(201);
+    expect((await authorized('get', `/v1/tenants/${tenantId}/bookings/${bookingId}`)).status).toBe(
+      200,
+    );
+    expect(calls).toEqual(['createScheduled']);
+  });
 });

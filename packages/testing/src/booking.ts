@@ -13,8 +13,12 @@ export class BookingTestClock {
 }
 
 export class BookingChatCollector {
-  readonly messages: Array<{ tenantId: string; channelId: string; dedupeKey: string; body: string }> =
-    [];
+  readonly messages: Array<{
+    tenantId: string;
+    channelId: string;
+    dedupeKey: string;
+    body: string;
+  }> = [];
 
   async send(input: { tenantId: string; channelId: string; dedupeKey: string; body: string }) {
     if (!this.messages.some((message) => message.dedupeKey === input.dedupeKey)) {

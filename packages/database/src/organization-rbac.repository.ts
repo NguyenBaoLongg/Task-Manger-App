@@ -555,6 +555,37 @@ export class OrganizationRbacRepository {
       }),
     );
   }
+
+  async resolvePermissionScope(tenantId: string, membershipId: string, code: string) {
+    const permission = await this.db.permission.findUnique({ where: { code } });
+    if (!permission) return { tenantWide: false, branchIds: [] };
+    const rolePermissions = await this.db.rolePermission.findMany({
+      where: { tenantId, permissionId: permission.id },
+      select: { roleId: true },
+    });
+    if (rolePermissions.length === 0) return { tenantWide: false, branchIds: [] };
+    const now = new Date();
+    const bindings = await this.db.membershipRoleBinding.findMany({
+      where: {
+        tenantId,
+        membershipId,
+        roleId: { in: rolePermissions.map((item) => item.roleId) },
+        effectiveFrom: { lte: now },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+      },
+      select: { scopeType: true, branchId: true },
+    });
+    return {
+      tenantWide: bindings.some((binding) => binding.scopeType === 'TENANT'),
+      branchIds: [
+        ...new Set(
+          bindings
+            .filter((binding) => binding.scopeType === 'BRANCH' && binding.branchId)
+            .map((binding) => binding.branchId as string),
+        ),
+      ].sort(),
+    };
+  }
 }
 
 interface LifecycleUpdate {

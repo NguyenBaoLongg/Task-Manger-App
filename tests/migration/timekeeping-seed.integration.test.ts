@@ -51,7 +51,7 @@ live('deterministic Module 3 sample seed', () => {
       attendancePenaltyPolicies: 1,
       workflowDefinitions: 4,
       offCalendarVersions: 2,
-      permissions: 11,
+      permissions: 12,
     });
   });
 });

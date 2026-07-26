@@ -7,6 +7,8 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/build/**',
+      '**/*.d.ts',
+      'apps/worker/src/**/*.js',
       'dist-tests/**',
       '**/coverage/**',
       '**/generated/**',
@@ -26,7 +28,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20,
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 100,
           allowDefaultProject: [
             'apps/worker/tests/unit/*.test.ts',
             'apps/worker/tests/integration/*.test.ts',

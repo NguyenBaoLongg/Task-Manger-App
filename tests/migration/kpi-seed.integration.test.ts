@@ -20,7 +20,7 @@ live('deterministic KPI sample seed', () => {
       targets: 3,
       mappings: 3,
       policies: 1,
-      forms: 3,
+      forms: 4,
       permissions: 8,
     });
   });

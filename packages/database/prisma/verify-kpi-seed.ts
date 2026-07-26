@@ -78,7 +78,7 @@ export async function verifyKpiSeed(db: DatabaseClient) {
     result.targets !== 3 ||
     result.mappings !== 3 ||
     result.policies !== 1 ||
-    result.forms !== 3 ||
+    result.forms !== 4 ||
     result.permissions !== kpiPermissionCodes.length
   ) {
     throw new Error(`KPI seed verification failed: ${JSON.stringify(result)}`);

@@ -771,6 +771,7 @@ model MediaObject {
   sourceType        String      @map("source_type") @db.VarChar(80)
   sourceId          String?     @map("source_id") @db.Uuid
   purpose           String      @db.VarChar(50)
+  consentId         String?     @map("consent_id") @db.Uuid
   storageProvider   String      @map("storage_provider") @db.VarChar(32)
   bucket            String      @db.VarChar(255)
   objectKey         String      @map("object_key") @db.VarChar(1024)
@@ -789,6 +790,7 @@ model MediaObject {
   @@id([tenantId, id])
   @@unique([storageProvider, bucket, objectKey])
   @@index([tenantId, sourceType, sourceId])
+  @@index([tenantId, consentId])
   @@index([tenantId, status, uploadExpiresAt])
   @@map("media_objects")
 }
@@ -1940,9 +1942,15 @@ model CustomerPhotoDebt {
   actionItemId      String?                @map("action_item_id") @db.Uuid
   resolvedMediaId   String?                @map("resolved_media_id") @db.Uuid
   sourceEventId     String                 @map("source_event_id") @db.Uuid
+  openedByMembershipId String?             @map("opened_by_membership_id") @db.Uuid
   openedAt          DateTime               @default(now()) @map("opened_at") @db.Timestamptz(3)
+  openedReason      String?                @map("opened_reason") @db.VarChar(500)
+  resolvedByMembershipId String?           @map("resolved_by_membership_id") @db.Uuid
   resolvedAt        DateTime?              @map("resolved_at") @db.Timestamptz(3)
   resolutionReason  String?                @map("resolution_reason") @db.VarChar(500)
+  waivedByMembershipId String?             @map("waived_by_membership_id") @db.Uuid
+  waivedAt          DateTime?              @map("waived_at") @db.Timestamptz(3)
+  waiverReason      String?                @map("waiver_reason") @db.VarChar(500)
 
   @@id([tenantId, id])
   @@unique([tenantId, bookingId])
@@ -2052,9 +2060,10 @@ model ExportRequest {
   requestHash           String       @map("request_hash") @db.VarChar(64)
   state                 ExportState  @default(PENDING)
   progressRows          Int          @default(0) @map("progress_rows")
-  checkpoint            String?      @db.VarChar(500)
-  attempt               Int          @default(0)
-  leaseOwner            String?      @map("lease_owner") @db.VarChar(160)
+    checkpoint            String?      @db.VarChar(500)
+    attempt               Int          @default(0)
+    nextAttemptAt         DateTime?    @map("next_attempt_at") @db.Timestamptz(3)
+    leaseOwner            String?      @map("lease_owner") @db.VarChar(160)
   leaseUntil            DateTime?    @map("lease_until") @db.Timestamptz(3)
   mediaObjectId         String?      @map("media_object_id") @db.Uuid
   checksumSha256        String?      @map("checksum_sha256") @db.VarChar(64)
@@ -2068,7 +2077,8 @@ model ExportRequest {
 
   @@id([tenantId, id])
   @@unique([tenantId, requesterMembershipId, idempotencyKey])
-  @@index([tenantId, state, leaseUntil, id])
+    @@index([tenantId, state, leaseUntil, id])
+    @@index([tenantId, state, nextAttemptAt, id])
   @@index([tenantId, requesterMembershipId, createdAt, id])
   @@map("export_requests")
 }

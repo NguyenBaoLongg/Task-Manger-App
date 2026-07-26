@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { DatabaseClient } from './client.js';
+import { runInTransaction, type DatabaseExecutor } from './client.js';
 import { decodeTimeCursor, encodeTimeCursor } from './cursor.js';
 
 export class ActionItemRepository {
-  constructor(private readonly db: DatabaseClient) {}
+  constructor(private readonly db: DatabaseExecutor) {}
 
   async project(input: {
     tenantId: string;
@@ -26,7 +26,7 @@ export class ActionItemRepository {
     eventId?: string;
     correlationId: string;
   }) {
-    return this.db.$transaction(async (tx) => {
+    return runInTransaction(this.db, async (tx) => {
       await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id
         FROM tenant_memberships

@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@adsup/database':
+        specifier: workspace:*
+        version: link:packages/database
       '@eslint/js':
         specifier: ^9.0.0
         version: 9.39.5
@@ -117,6 +120,9 @@ importers:
       '@adsup/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@aws-sdk/client-s3':
+        specifier: ^3.0.0
+        version: 3.1090.0
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0

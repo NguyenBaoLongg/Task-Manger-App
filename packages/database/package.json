@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate --config prisma.config.ts",
     "prisma:migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
     "prisma:seed": "prisma db seed --config prisma.config.ts",
+    "prisma:verify-booking-seed": "node --import tsx prisma/verify-booking-seed.ts",
     "prisma:verify-kpi-seed": "node --import tsx prisma/verify-kpi-seed.ts"
   },
   "dependencies": {

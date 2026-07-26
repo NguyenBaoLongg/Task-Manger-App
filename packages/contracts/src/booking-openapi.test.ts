@@ -66,6 +66,42 @@ describe('Module 4 OpenAPI', () => {
       '/v1/tenants/{tenantId}/bookings/{bookingId}/customer-photo-upload-intents',
     );
   });
+
+  it('keeps every US6 configuration route published with its runtime permission', async () => {
+    const document = await loadBookingOpenApiDocument();
+    const paths = document.paths as Record<string, Record<string, HttpOperation>>;
+    const expected: Record<string, { method: string; permission: string }> = {
+      '/v1/tenants/{tenantId}/booking-services': {
+        method: 'post',
+        permission: 'booking.config.manage',
+      },
+      '/v1/tenants/{tenantId}/customer-photo-consent-policies': {
+        method: 'post',
+        permission: 'booking.config.manage',
+      },
+      '/v1/tenants/{tenantId}/customer-photo-consent-policies/effective': {
+        method: 'get',
+        permission: 'booking.read',
+      },
+      '/v1/tenants/{tenantId}/booking-retention-policies': {
+        method: 'post',
+        permission: 'booking.retention.manage',
+      },
+      '/v1/tenants/{tenantId}/booking-retention-policies/effective': {
+        method: 'get',
+        permission: 'booking.config.read',
+      },
+      '/v1/tenants/{tenantId}/booking-media/{mediaId}/legal-hold': {
+        method: 'post',
+        permission: 'booking.legal-hold.manage',
+      },
+    };
+    for (const [path, expectation] of Object.entries(expected)) {
+      expect(paths[path]?.[expectation.method]?.['x-permission'], path).toBe(
+        expectation.permission,
+      );
+    }
+  });
 });
 
 interface HttpOperation {

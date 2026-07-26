@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Response } from 'express';
 import { z } from 'zod';
 import type {
   AuthTenantsRepository,
@@ -25,21 +25,33 @@ export function mediaRoutes(
   const router = Router();
   const auth = authenticate(tokens);
   const scoped = tenantContext(authRepo);
+  const authorizeUploadIntent = async (
+    request: AuthenticatedRequest,
+    response: Response,
+    next: NextFunction,
+  ) => {
+    const permission =
+      request.body?.purpose === 'CUSTOMER_BOOKING_PHOTO'
+        ? 'booking.arrival.manage'
+        : 'media.create';
+    await requirePermission(
+      rbacRepo,
+      permission,
+      (currentRequest) => currentRequest.body?.branchId as string | undefined,
+    )(request, response, next);
+  };
   router.post(
     '/tenants/:tenantId/media/upload-intents',
     auth,
     scoped,
-    requirePermission(
-      rbacRepo,
-      'media.create',
-      (request) => request.body?.branchId as string | undefined,
-    ),
+    authorizeUploadIntent,
     async (request: AuthenticatedRequest, response) => {
       const body = z
         .object({
           branchId: z.string().uuid().nullable().optional(),
           sourceType: z.string().min(2).max(80).optional(),
           sourceId: z.string().uuid().nullable().optional(),
+          consentId: z.string().uuid().optional(),
           purpose: z.string().min(2).max(50),
           contentType: z.enum([
             'image/jpeg',

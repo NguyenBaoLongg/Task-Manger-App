@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bookingArrivedEventSchema,
+  bookingCustomerPhotoReadyEventSchema,
   bookingEventEnvelopeSchema,
+  bookingPhotoDebtChangedEventSchema,
+  bookingTourCompletedEventSchema,
   createCustomerPhotoConsentSchema,
   createCustomerSchema,
   createExportSchema,
@@ -71,5 +75,79 @@ describe('Module 4 Zod contracts', () => {
       payload: { bookingId: id },
     });
     expect(event.payload).not.toHaveProperty('customerPhone');
+  });
+
+  it('validates every US2 event with tenant and branch scoped payloads', () => {
+    const base = {
+      eventId: id,
+      schemaVersion: 1,
+      tenantId: id,
+      branchId: id,
+      aggregateType: 'BOOKING' as const,
+      aggregateId: id,
+      occurredAt: '2026-07-24T03:00:00.000Z',
+      correlationId: 'us2-event-contract',
+      actorMembershipId: id,
+    };
+    expect(
+      bookingArrivedEventSchema.parse({
+        ...base,
+        eventType: 'booking.arrived.v1',
+        payload: {
+          bookingId: id,
+          branchId: id,
+          customerId: id,
+          assignedMembershipId: id,
+          consentId: id,
+          businessDate: '2026-07-24',
+          hasReadyCustomerPhoto: false,
+        },
+      }),
+    ).toBeTruthy();
+    expect(
+      bookingCustomerPhotoReadyEventSchema.parse({
+        ...base,
+        eventType: 'booking.customer-photo-ready.v1',
+        payload: { bookingId: id, branchId: id, customerId: id, mediaId: id },
+      }),
+    ).toBeTruthy();
+    expect(
+      bookingPhotoDebtChangedEventSchema.parse({
+        ...base,
+        eventType: 'booking.photo-debt-changed.v1',
+        payload: {
+          debtId: id,
+          bookingId: id,
+          branchId: id,
+          ownerMembershipId: id,
+          fromState: 'OPEN',
+          toState: 'RESOLVED',
+          actionItemId: id,
+          businessDate: '2026-07-24',
+        },
+      }),
+    ).toBeTruthy();
+    expect(
+      bookingTourCompletedEventSchema.parse({
+        ...base,
+        eventType: 'booking.tour-completed.v1',
+        payload: {
+          tourCompletionId: id,
+          bookingId: id,
+          branchId: id,
+          performedByMembershipId: id,
+          serviceOfferingId: id,
+          businessDate: '2026-07-24',
+          completedAt: '2026-07-24T03:00:00.000Z',
+        },
+      }),
+    ).toBeTruthy();
+    expect(() =>
+      bookingTourCompletedEventSchema.parse({
+        ...base,
+        eventType: 'booking.tour-completed.v1',
+        payload: { bookingId: id, branchId: 'not-a-uuid' },
+      }),
+    ).toThrow();
   });
 });

@@ -1,10 +1,6 @@
 export type BookingType = 'SCHEDULED' | 'WALK_IN';
-export type BookingStatus =
-  | 'SCHEDULED'
-  | 'ARRIVED'
-  | 'NO_SHOW'
-  | 'CANCELLED'
-  | 'RESCHEDULED';
+export type BookingStatus = 'SCHEDULED' | 'ARRIVED' | 'NO_SHOW' | 'CANCELLED' | 'RESCHEDULED';
+export type BookingReportType = 'TOMORROW_SCHEDULE' | 'TODAY_OUTCOME';
 
 export interface BookingWindow {
   readonly type: BookingType;

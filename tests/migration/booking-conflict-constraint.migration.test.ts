@@ -12,9 +12,10 @@ describe('Module 4 booking constraints', () => {
     expect(sql).toContain('CREATE EXTENSION IF NOT EXISTS btree_gist');
     expect(sql).toContain('booking_active_employee_60m_excl');
     expect(sql).toContain("interval '60 minutes'");
+    expect(sql).toContain("AT TIME ZONE 'UTC'");
     expect(sql).toContain("'[)'");
     expect(sql).toContain('"booking_type" = \'SCHEDULED\'');
-    expect(sql).toContain('"status" IN (\'SCHEDULED\', \'ARRIVED\')');
+    expect(sql).toContain("\"status\" IN ('SCHEDULED', 'ARRIVED')");
   });
 
   it('declares composite tenant foreign keys and retry-safe uniqueness', async () => {

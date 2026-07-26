@@ -19,6 +19,28 @@ corepack pnpm --filter @adsup/database prisma:seed
 Seed verification must confirm booking form version, cancellation reasons, report destinations,
 retention policy, customers, services and representative scheduled/walk-in bookings.
 
+### Recorded Gate Results (2026-07-26)
+
+- `prisma:generate`: PASS, Prisma Client 7.8.0 generated.
+- `prisma:migrate:deploy`: PASS, 13 migrations found and no pending migrations.
+- `prisma:seed`: PASS, deterministic booking seed completed.
+- `prisma:verify-booking-seed`: PASS, verified `bookingFormVersions=1`,
+  `cancellationReasons=1`, `reportDestinations=1`, `consentPolicies=1`,
+  `retentionPolicies=1`, `customers=1`, `services=1`, `bookings=1`, with
+  `customerPhotoDays=180` and `xlsxDays=30`.
+- `format:check`: PASS, all workspace files formatted.
+- `lint`: PASS, ESLint completed with `--max-warnings=0`.
+- `typecheck`: PASS, all 7 workspace packages/apps completed successfully.
+- `test:contract`: PASS, 26 files and 109 tests passed.
+- `test`: PASS, 54 files and 154 tests passed.
+- `test:coverage`: PASS, 124 files and 353 tests passed (28 files and 69 tests skipped); Statements 48.49%, Branches 35.15%, Functions 44.70%, Lines 48.40%.
+- `test:integration`: PASS against local PostgreSQL, 63 files and 135 tests passed; includes tenant isolation, RBAC, conflict/arrival concurrency and worker retry/dedupe coverage.
+- `test:migration`: PASS against local PostgreSQL, 8 files and 22 tests passed; no pending migrations and booking seed verification passed.
+- Retention/privacy and load gates: PASS, 5 targeted retention/media tests plus 2 database smoke tests passed; root load smoke passed KPI 10,000, timekeeping 10,000 and booking 20,000 profiles.
+- `build`: PASS, all 7 buildable workspace packages/apps compiled, including API and worker; Module 4 source/dependency scan found no PDF/mobile runtime dependency or source reference and `apps/mobile` is absent.
+- Documentation: PASS, Module 4 API/worker startup, local adapter/S3 configuration, backup/restore, retention/legal-hold and gate commands were added to `README.md` and `docs/architecture/operations.md`; final `format:check` passed.
+- Graphify: PASS, post-change update rebuilt 3,186 nodes and 5,339 edges; Module 4 query returned booking/API/worker/retention nodes and the API-to-worker path resolved in 3 hops through `configureBackplane()` and `server`.
+
 ## Automated Gates
 
 ```powershell

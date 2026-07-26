@@ -86,9 +86,12 @@ export class AttendanceRepository {
         orderBy: [{ versionNumber: 'desc' }, { id: 'desc' }],
       });
       if (previous) {
+        const supersededAt = new Date(
+          Math.max(input.effectiveAt.getTime(), previous.effectiveAt.getTime() + 1),
+        );
         await tx.workScheduleVersion.update({
           where: { tenantId_id: { tenantId: input.tenantId, id: previous.id } },
-          data: { supersededAt: input.effectiveAt },
+          data: { supersededAt },
         });
       }
       const schedule = await tx.workScheduleVersion.create({

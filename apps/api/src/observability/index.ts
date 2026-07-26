@@ -1,6 +1,11 @@
 import pino from 'pino';
 import type { AppConfig } from '@adsup/config';
 
+export const bookingMetricNames = {
+  created: 'bookings_created_total',
+  conflict: 'booking_conflicts_total',
+} as const;
+
 export const createLogger = (config: Pick<AppConfig, 'logLevel'>) =>
   pino({
     level: config.logLevel,

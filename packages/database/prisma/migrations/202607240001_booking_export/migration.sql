@@ -341,7 +341,11 @@ ALTER TABLE "bookings"
     "tenant_id" WITH =,
     "branch_id" WITH =,
     "assigned_membership_id" WITH =,
-    tstzrange("scheduled_start_at", "scheduled_start_at" + interval '60 minutes', '[)') WITH &&
+    tstzrange(
+      "scheduled_start_at",
+      ("scheduled_start_at" AT TIME ZONE 'UTC' + interval '60 minutes') AT TIME ZONE 'UTC',
+      '[)'
+    ) WITH &&
   )
   WHERE ("booking_type" = 'SCHEDULED' AND "status" IN ('SCHEDULED', 'ARRIVED'));
 
