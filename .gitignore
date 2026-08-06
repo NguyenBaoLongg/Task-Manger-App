@@ -14,3 +14,11 @@ graphify-out/
 packages/database/src/generated/
 packages/database/prisma/dev.db
 .prisma/
+
+# IDE
+.idea/
+
+# Claude Code local state. `.claude/skills/` is a working copy of `.agents/skills/`,
+# which is the tracked source of truth; committing both would let them drift apart.
+.claude/skills/
+.claude/settings.local.json
