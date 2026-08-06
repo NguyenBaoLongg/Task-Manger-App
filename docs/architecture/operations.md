@@ -41,3 +41,20 @@ Create a `pg_dump -Fc` backup before migrations or retention policy changes. Res
 ### Gate commands
 
 Use `format:check`, `lint`, `typecheck`, unit/contract/integration/migration tests, coverage, `load:smoke`, and `build` before opening the next module. Do not claim the Module 4 dependency gate until `$speckit-converge` has checked the final artifacts.
+
+## Module 5 mobile operations
+
+Mobile sessions use SecureStore for token material and the backend remains authoritative for tenant,
+branch, RBAC, KPI, attendance, booking, chat and approval state. On logout, tenant switch, session
+expiry or upload cancellation, sensitive query families and local media references are evicted.
+
+Socket.IO joins only authorized channel/scope rooms. Reconnect fetches authoritative HTTP state and
+deduplicates event/badge effects by server event ID or effect key. Notification payloads contain safe
+IDs/routes only; the shared deep-link resolver re-authorizes tenant, branch, permission, freshness
+and state before any mutation. `ARRIVED_PROOF` cannot skip consent/proof media, and
+`CANCEL_OR_RESCHEDULE` cannot skip current reason/state validation.
+
+For local troubleshooting, start PostgreSQL, API and worker first, set `EXPO_PUBLIC_API_BASE_URL`,
+then run the mobile Jest/typecheck/lint gates. Use `apps/mobile/.detoxrc.js` for native profiles.
+Windows can validate JavaScript and Expo export but needs Android tooling or macOS/Xcode for native
+device execution. Never put FCM/APNs, Google, S3 secrets, signed URLs or raw media in logs.

@@ -135,6 +135,23 @@ async function main() {
       fullNameConfirmedAt: new Date('2026-07-10T00:00:00Z'),
     },
   });
+  await prisma.externalIdentity.upsert({
+    where: {
+      provider_providerSubject: { provider: 'GOOGLE', providerSubject: 'local-mobile-user' },
+    },
+    update: {
+      userId: ownerUserId,
+      email: 'mobile@adsup.local',
+      emailVerified: true,
+    },
+    create: {
+      userId: ownerUserId,
+      provider: 'GOOGLE',
+      providerSubject: 'local-mobile-user',
+      email: 'mobile@adsup.local',
+      emailVerified: true,
+    },
+  });
   await prisma.tenant.upsert({
     where: { id: tenantId },
     update: { name: 'Công ty TNHH ABC' },

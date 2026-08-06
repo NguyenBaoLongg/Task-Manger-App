@@ -185,8 +185,10 @@ validated in-app fallback.
 
 Run small/large/tablet layout checks, light/dark mode, dynamic Vietnamese text, screen reader and
 focus-order checks, reduced motion, offline/session-expiry/permission-denied recovery, API contract
-compatibility, unit/contract/integration/E2E tests, the SC-001 and SC-003 20-run timing samples,
-the SC-009 recovery matrix with its injected-failure denominator, typecheck, lint and mobile build.
+compatibility, unit/contract/integration/E2E tests, the SC-001 first-attempt 20-run timing sample,
+the SC-003 20-run matrix for cold start, warm cache and degraded network, and the SC-009 recovery
+matrix covering API error, session expiry, permission denial and network interruption with its
+injected-failure denominator. Then run typecheck, lint and mobile build.
 Update README and operations documentation with real commands and provider requirements only after
 verification.
 

@@ -80,6 +80,31 @@ corepack pnpm --filter @adsup/mobile lint
 corepack pnpm --filter @adsup/mobile build
 ```
 
+On Windows, verify the generated Android development and production APKs directly. A short CMake
+staging path is required when the checkout path would otherwise exceed Ninja's legacy `MAX_PATH`
+limit:
+
+```powershell
+$env:ADSUP_ANDROID_CXX_DIR = 'D:\cxx\adsup-mobile'
+Push-Location apps/mobile/android
+.\gradlew.bat assembleDebug --no-daemon
+.\gradlew.bat assembleRelease --no-daemon
+Pop-Location
+```
+
+The committed Gradle Node wrapper supplies Expo's monorepo-root and bundle environment flags. The
+verified APKs are written under `apps/mobile/android/app/build/outputs/apk/debug/` and
+`apps/mobile/android/app/build/outputs/apk/release/`.
+
+Detox uses only `apps/mobile/.detoxrc.js`. Run a configured profile explicitly, for example
+`corepack pnpm --filter @adsup/mobile exec detox test --config .detoxrc.js --configuration android.phone.light`.
+The canonical matrix also provides `ios.phone.dark`, `ios.tablet.light`, `ios.tablet.dark`,
+`android.phone.dark`, `android.tablet.light` and `android.tablet.dark`, plus phone accessibility
+profiles for both platforms.
+Native builds require Android Studio or Xcode. Windows can build Android debug/release APKs and run
+Android Detox when an AVD or physical device is online, but cannot execute the iOS simulator
+profile.
+
 The final module gate also runs the repository API contract tests, backend integration tests,
 mobile accessibility checks and an end-to-end smoke against the seeded local API. A test may use a
 provider double, but the critical path must exercise the real API contracts and real PostgreSQL

@@ -290,7 +290,7 @@ run retention twice and verify only eligible binaries delete once while history 
 - [X] T136 Run API/worker/shared-package builds and verify no PDF dependency or mobile code entered Module 4 in `specs/004-booking-export/quickstart.md`
 - [X] T137 Update Module 4 API, worker, backup/restore and local operation documentation in `README.md` and `docs/architecture/operations.md`
 - [X] T138 Update Graphify after implementation and verify Module 4 paths with `.tools/graphify.ps1`
-- [ ] T139 Run `$speckit-converge` against spec/plan/tasks/contracts/data-model/quickstart and append only genuine missing Module 4 work to `specs/004-booking-export/tasks.md`
+- [X] T139 Run `$speckit-converge` against spec/plan/tasks/contracts/data-model/quickstart and append only genuine missing Module 4 work to `specs/004-booking-export/tasks.md`
 
 ---
 
