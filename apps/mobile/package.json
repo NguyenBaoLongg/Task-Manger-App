@@ -47,6 +47,8 @@
     "jest-expo": "54.0.17",
     "metro": "0.82.5",
     "metro-runtime": "0.82.5",
+    "react-dom": "19.1.0",
+    "react-native-web": "^0.21.2",
     "typescript": "5.9.3"
   }
 }

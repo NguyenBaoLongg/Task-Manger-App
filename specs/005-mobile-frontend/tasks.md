@@ -266,6 +266,8 @@ expiry and unsupported native capabilities; each path must have a recoverable st
 user stories are complete.
 
 - [X] T108 [P] Complete FR/CR/SC-to-test traceability in `specs/005-mobile-frontend/traceability.md`.
+      All 26 FR, 6 CR and 10 SC are now mapped. FR-026 and CR-005 are recorded as REVIEW rather
+      than PASS, and FR-025, SC-001, SC-003, SC-010 stay BLOCKED on the native-device tasks.
 - [X] T109 [P] Add contract compatibility snapshots for all consumed Module 1-4 OpenAPI operations in `apps/mobile/tests/contract/module-compatibility.contract.test.ts`.
 - [X] T110 [P] Add a privacy/RBAC review record for tenant isolation, signed media, retention, consent, deep links, logs and local eviction in `specs/005-mobile-frontend/privacy-review.md`.
 - [ ] T111 Run mobile unit, contract, integration, accessibility and E2E suites and record commands/results in `specs/005-mobile-frontend/verification.md`.

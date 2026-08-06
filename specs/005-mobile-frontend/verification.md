@@ -14,9 +14,8 @@
 - Detox native E2E: not completed. The generated Android project and both debug/release APKs now
   build successfully, but no Android target remains online and this Windows host has no iOS
   simulator/Xcode development environment.
-- Expo export: blocked locally. Online export cannot reach Expo's native-module version service;
-  offline export also reports the optional `react-native-web` dependency missing. No production
-  credential is required for this blocker.
+- Expo export: RESOLVED on 2026-08-06, see the update below. Previously blocked because the
+  optional `react-native-web` dependency was missing.
 - Local Expo Go preview: Metro is reachable at `exp://192.168.88.121:8081` and the API is
   reachable at `http://192.168.88.121:3000`. The local fake Google token matches the backend
   verifier format, and a live `POST /v1/auth/google` check returned an access token.
@@ -142,3 +141,24 @@
 - T112 and T113 are complete from the recorded build/static/compatibility evidence. T117 review is
   complete with unresolved gates recorded here. T111 and T114 remain open because native E2E and
   the live PostgreSQL/API/worker/development-build quickstart have not run.
+
+## Update 2026-08-06
+
+- Traceability (T108/CR-006): `traceability.md` rebuilt. It previously held 10 rows covering 2 of
+  26 FR, 0 of 6 CR and 3 of 10 SC, and three rows cited wrong identifiers — `FR-010` was labelled
+  video check-in (it is dynamic forms), `FR-020` was labelled booking/ARRIVED (it is the deep-link
+  re-check requirement) and `FR-030` does not exist in `spec.md`, which stops at FR-026. All 26 FR,
+  6 CR and 10 SC are now mapped to named artifacts, and all 58 file paths cited were verified to
+  exist. FR-026 and CR-005 are recorded as REVIEW rather than PASS: FR-026 is negative scope with
+  nothing to assert, and CR-005's latency telemetry has no dedicated assertion.
+- `react-native-web@0.21.2` and `react-dom@19.1.0` added as mobile dev dependencies. `react-dom`
+  is pinned to 19.1.0 to match the Expo-pinned `react@19.1.0`; installing `react-native-web` alone
+  pulled `react-dom@19.2.7` and produced an unmet peer warning.
+- Expo web export: PASS with `expo export --platform web`. Produced a 1.9 MB bundle plus
+  `index.html` and `metadata.json`. This clears the export blocker recorded above; no production
+  credential was required. Native iOS/Android export remains covered by T135.
+- Regression after the dependency change: `corepack pnpm --filter @adsup/mobile test` PASS,
+  57 suites / 83 tests, unchanged from the 2026-08-03 baseline. Typecheck PASS. Lint PASS with
+  `--max-warnings=0`.
+- No native-device result is claimed by this update. T107, T111, T114, T118, T119, T132, T133 and
+  T135 remain open and still require a stable Android or iOS runtime.
