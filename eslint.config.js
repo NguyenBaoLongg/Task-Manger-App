@@ -2,6 +2,14 @@ import eslint from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
+const typeCheckedRules = Object.assign(
+  {},
+  ...tseslint.configs.recommendedTypeChecked.map((config) => config.rules ?? {}),
+);
+const disableTypeCheckedRules = Object.fromEntries(
+  Object.keys(typeCheckedRules).map((rule) => [rule, 'off']),
+);
+
 export default tseslint.config(
   {
     ignores: [
@@ -18,13 +26,14 @@ export default tseslint.config(
       '.specify/**',
       '.tools/**',
       'vitest.config.ts',
+      '**/.detoxrc.js',
     ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   prettier,
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
       parserOptions: {
         projectService: {
@@ -47,10 +56,33 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.js', '**/*.mjs'],
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly', URL: 'readonly', __ENV: 'readonly' },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        URL: 'readonly',
+        __ENV: 'readonly',
+        require: 'readonly',
+        __dirname: 'readonly',
+        module: 'readonly',
+      },
+    },
+    rules: {
+      ...disableTypeCheckedRules,
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/await-thenable': 'off',
+    },
+  },
+  {
+    files: ['apps/mobile/**/*.js', 'apps/mobile/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        module: 'readonly',
+        require: 'readonly',
+        __dirname: 'readonly',
+      },
     },
   },
 );

@@ -1,6 +1,7 @@
 node_modules
 dist
 build
+.expo
 coverage
 .cache
 third_party

@@ -41,6 +41,13 @@ describe('foundation migration and seed', () => {
     expect(seed.indexOf("'tenant.manage'")).toBeGreaterThan(seed.indexOf("'audit.read'"));
   });
 
+  it('binds the local mobile preview identity to the seeded owner workspace', async () => {
+    const seed = await readFile(seedPath, 'utf8');
+    expect(seed).toContain("providerSubject: 'local-mobile-user'");
+    expect(seed).toContain("email: 'mobile@adsup.local'");
+    expect(seed).toContain('userId: ownerUserId');
+  });
+
   it('allows one existing membership to accept different invitations', async () => {
     const sql = await readFile(existingMemberInvitationMigrationPath, 'utf8');
     expect(sql).toContain(

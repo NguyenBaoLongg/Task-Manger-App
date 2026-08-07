@@ -50,3 +50,23 @@ corepack pnpm --filter @adsup/database prisma:verify-booking-seed
 Run `corepack pnpm dev:api` and `corepack pnpm dev:worker` in separate terminals. Local exports and retention use the local adapter; production can set `OBJECT_STORAGE_DRIVER=s3` and the S3-compatible variables from `.env.example`. Local tests do not require cloud credentials.
 
 Before a migration, stop mutation workers and create a custom-format backup with `pg_dump -Fc`. Restore into a new database with `pg_restore`, deploy migrations, verify tenant counts/audit continuity, and run negative tenant-isolation smoke tests before switching traffic.
+
+## Module 5 mobile frontend
+
+The Expo app lives in `apps/mobile` and consumes the real Module 1-4 API. It includes the auth and
+workspace scope shell, KPI/action center, video attendance and approval adapters, booking forms and
+arrival proof boundaries, tenant chat, notification badges and quick-action fallbacks. Local
+acceptance uses deterministic provider doubles for Google, camera, notifications and object storage;
+authoritative business data remains on the backend.
+
+```powershell
+$env:EXPO_PUBLIC_API_BASE_URL = "http://localhost:3000/api"
+corepack pnpm --filter @adsup/mobile test
+corepack pnpm --filter @adsup/mobile typecheck
+corepack pnpm --filter @adsup/mobile lint
+corepack pnpm --filter @adsup/mobile start
+```
+
+Native camera, notification-category and lock-screen checks require an Expo development build.
+Detox uses only `apps/mobile/.detoxrc.js`; production Google/FCM/APNs credentials are intentionally
+not required for local tests.
