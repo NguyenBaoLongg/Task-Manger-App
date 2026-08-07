@@ -29,16 +29,15 @@
   T132 now uses a real Detox harness in `apps/mobile/tests/e2e/auth-workspace-performance.e2e.ts`
   instead of the previous placeholder. Static typecheck and lint passed on 2026-07-29, but the
   native numerator is not recorded. A later Windows run reached `adb device` and API health `200`,
-  but local Android AVDs (`Pixel_6_API_34`, `Pixel_4` and `Small_Phone`) repeatedly crashed,
-  terminated or became `offline`; the crash stack references `libGLESv2.dll`, `libvulkan_lvp.dll`
-  and `libgfxstream_backend.dll`, indicating a host Android Emulator/graphics-driver blocker rather
-  than app code. Result denominator: 20; numerator: blocked/not recorded; T132 remains unchecked
-  until a stable native Android/iOS development build executes at least 19/20 runs successfully.
+  but local Android AVDs could not be driven to a booted state. The graphics-driver explanation
+  previously recorded here was wrong; see the 2026-08-07 root-cause entry below. Result
+  denominator: 20; numerator: blocked/not recorded; T132 remains unchecked until a stable native
+  Android/iOS development build executes at least 19/20 runs successfully.
 - SC-003 denominator: 20 runs for each device profile and `COLD_START`, `WARM_CACHE`,
   `DEGRADED_NETWORK`; pass threshold 19/20 under 3s. The Detox harness exists, but no native
   device numerator is recorded yet. T133 remains unchecked on this Windows host because the tested
-  Android AVDs cannot stay online long enough to execute the Dashboard/action-center performance
-  sample; the blocker is the same Android Emulator graphics/runtime failure recorded for T132.
+  Android AVDs never reach a booted state; the blocker is the same host virtualization failure
+  recorded for T132 and root-caused in the 2026-08-07 entry below.
 - SC-009 denominator: every injected failure scenario, minimum 20 across platform/network profiles;
   recovery requires safe retry, re-auth or refreshed server state without duplicate mutation.
   Jest covers 20/20 injected scenarios and currently passes at 100% in the local matrix; T120 is
@@ -88,8 +87,9 @@
    native Android/iOS development build with the local API reachable and records at least 19
    successful runs out of 20 under 60s.
 5. The current Windows host cannot provide that native result yet because every tested Android AVD
-   terminates or stays offline due to emulator graphics/runtime failures; use a stable Android
-   device, a different host, or fix the emulator/driver environment before retrying Detox.
+   stays `offline` and never boots; the guest never executes, root-caused to host virtualization
+   (VBS/WHPX) in the 2026-08-07 entry, not to graphics. Use a physical Android device, a different
+   host, or apply one of the administrator-level host fixes before retrying Detox.
 6. T133 and T135 remain unchecked for native verification. T133 cannot record SC-003
    Dashboard/action-center numerator data without a stable native runtime. T135 cannot close the
    final Expo development/production native verification gate until Detox/native-device execution is
@@ -162,3 +162,38 @@
   `--max-warnings=0`.
 - No native-device result is claimed by this update. T107, T111, T114, T118, T119, T132, T133 and
   T135 remain open and still require a stable Android or iOS runtime.
+
+## Update 2026-08-07 — Android emulator root cause
+
+The graphics-driver diagnosis recorded earlier in this file was wrong. A controlled run replaced it.
+
+Run: `emulator -avd Pixel_4_API_34_Clean -gpu swiftshader_indirect -no-snapshot -no-audio
+-no-boot-anim -no-window`, emulator 36.6.11.0, system image `android-34/google_apis/x86_64`.
+
+Observed:
+
+- All compatibility checks passed, including `hasCompatibleHypervisor` and `hasSufficientHwGpu`.
+- WHPX reported `Windows Hypervisor Platform accelerator is operational`.
+- The emulator opened its ADB ports; `adb devices` listed `emulator-5554`, and 5554/5555 were
+  LISTENING with an established connection.
+- The device stayed `offline` for 5.5 minutes and never reached `sys.boot_completed`.
+- `qemu-system-x86_64` measured **0% CPU over 10 seconds**, 224 MB working set, 111 threads. The
+  emulator had allocated 2560 MB. A booted Android guest holds 1.5-2.5 GB.
+
+0% CPU with the guest allocated but untouched means the guest kernel never executed an
+instruction. That rules out the previous explanation on three counts: the process did not crash,
+the run used software rendering with `-no-window` so the GPU was not in the path, and the hang
+occurs before any frame could be drawn.
+
+Host state: `VirtualizationBasedSecurityStatus = 2` (VBS running), `SecurityServicesRunning = 0`,
+HVCI disabled, `hypervisorlaunchtype` unset (Auto), `HvHost` running. WHPX initializes but does not
+execute the guest, which is the known failure mode when VBS holds the root hypervisor.
+
+Remediation options, all requiring administrator rights and a reboot, none applied here:
+
+1. `bcdedit /set hypervisorlaunchtype off`, then reboot, so the emulator uses its own hypervisor.
+2. Disable Core Isolation / VBS in Windows Security, then reboot.
+3. Install AEHD (Android Emulator Hypervisor Driver) in place of WHPX.
+
+A physical Android device over USB or `adb connect` avoids all three and needs no host change. It
+remains the recommended path for T107, T111, T118, T119, T132, T133 and T135.
