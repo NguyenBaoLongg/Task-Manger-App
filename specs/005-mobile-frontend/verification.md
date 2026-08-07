@@ -79,8 +79,9 @@
 
 1. Build and run the native development client on Android (Windows) or iOS (macOS), then execute
    the Detox phone/tablet, accessibility and critical-path scenarios.
-2. Validate every quickstart scenario with PostgreSQL, API, worker and Expo development build. This
-   host currently has no `docker` command on `PATH` and no Android runtime online.
+2. Validate every quickstart scenario with PostgreSQL, API, worker and Expo development build.
+   PostgreSQL is available: the host runs service `postgresql-x64-18` natively, so Docker is not
+   required for this task. The remaining gap is the Android runtime.
 3. T107 remains unchecked until a native Android/iOS development build executes the seeded Module
    1-4 API critical path end to end; this Windows run intentionally did not launch Detox.
 4. T132 remains unchecked until `apps/mobile/tests/e2e/auth-workspace-performance.e2e.ts` runs on a
@@ -180,20 +181,46 @@ Observed:
 - `qemu-system-x86_64` measured **0% CPU over 10 seconds**, 224 MB working set, 111 threads. The
   emulator had allocated 2560 MB. A booted Android guest holds 1.5-2.5 GB.
 
-0% CPU with the guest allocated but untouched means the guest kernel never executed an
-instruction. That rules out the previous explanation on three counts: the process did not crash,
-the run used software rendering with `-no-window` so the GPU was not in the path, and the hang
-occurs before any frame could be drawn.
+That rules out the previous explanation on three counts: the process did not crash, the run used
+software rendering with `-no-window` so the GPU was not in the path, and the hang occurs before any
+frame could be drawn.
+
+Two further runs were made on the same host. The first conclusion drawn from the single run above
+-- "the guest kernel never executes" -- was too strong; the full picture is that the guest executes
+and then stalls, and how far it gets depends on the AVD:
+
+| AVD | System image | CPU | Working set | `adb` state | Outcome |
+|---|---|---|---|---|---|
+| `Pixel_4_API_34_Clean` | android-34 google_apis | 0% | 224 MB | offline | Guest never ran. AVD ships `hw.gpu.enabled=no` |
+| `Pixel_4` | android-37.1 google_apis_playstore_ps16k | 206% | 3806 MB | offline | Ran hard for 13 minutes, never completed boot |
+| `Detox_A34` (created clean) | android-34 google_apis | 0% after progress | 1049 MB | **device** | Reached adbd handshake with `product:sdk_gphone64_x86_64`, then stalled; `adb shell` and `logcat` returned empty |
+
+`avdmanager create avd` writes `hw.gpu.enabled=no` by default, which is why the first AVD never
+started. `Detox_A34` was created with `hw.gpu.enabled=yes`, `hw.gpu.mode=swiftshader_indirect`,
+3072 MB RAM and 4 cores, and is retained for the retry.
 
 Host state: `VirtualizationBasedSecurityStatus = 2` (VBS running), `SecurityServicesRunning = 0`,
-HVCI disabled, `hypervisorlaunchtype` unset (Auto), `HvHost` running. WHPX initializes but does not
-execute the guest, which is the known failure mode when VBS holds the root hypervisor.
+HVCI disabled, `hypervisorlaunchtype` unset (Auto), `HvHost` running. WHPX initializes and the guest
+begins executing, but execution halts mid-boot. The host CPU is an Intel Core i9-13900H, a hybrid
+P-core/E-core part (14 cores / 20 threads, 15.7 GB RAM, 5 GB free), which is a known-problematic
+combination for WHPX-backed Android emulation. Hardware capacity is not the constraint.
 
-Remediation options, all requiring administrator rights and a reboot, none applied here:
+Nothing on this host depends on Hyper-V: Docker is not installed, no WSL distribution is present,
+and no Hyper-V VM exists. Disabling the Windows hypervisor therefore costs nothing here.
+
+Remediation options, all requiring administrator rights and a reboot:
 
 1. `bcdedit /set hypervisorlaunchtype off`, then reboot, so the emulator uses its own hypervisor.
 2. Disable Core Isolation / VBS in Windows Security, then reboot.
 3. Install AEHD (Android Emulator Hypervisor Driver) in place of WHPX.
 
-A physical Android device over USB or `adb connect` avoids all three and needs no host change. It
-remains the recommended path for T107, T111, T118, T119, T132, T133 and T135.
+Applied on 2026-08-07: AEHD is installed from SDK Manager (service `aehd` present, `Stopped`,
+start type System, driver at `Sdk/extras/google/Android_Emulator_hypervisor_driver`) and
+`bcdedit /set hypervisorlaunchtype off` returned success. The host has not yet rebooted, so VBS
+still reports status 2 and `HypervisorPresent` is still true. The retry against `Detox_A34` is
+pending that reboot.
+
+A cloud device farm was considered and rejected for this feature. SC-001 and SC-003 are latency
+measurements with 60s and 3s thresholds over 20 runs per profile; shared cloud hardware makes those
+numbers unreliable, and SC-010 requires the real Module 1-4 API, which runs locally and would have
+to be tunnelled, adding network latency to the very measurement under test.
