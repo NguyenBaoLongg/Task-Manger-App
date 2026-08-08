@@ -12,6 +12,10 @@ describe('MVP critical path', () => {
     await tapId('dashboard.booking-button');
     await expect(await waitForId('booking.calendar.screen')).toBeVisible();
 
+    // The booking routes live outside the `(tabs)` group, so the tab bar is not on screen while
+    // the calendar is open and `tab.chat` cannot be tapped from there. Relaunch into the tabbed
+    // shell first, matching how this test already re-enters before each surface group.
+    await signInToDashboard({ 'ui-test-profile': 'MVP_CRITICAL_PATH_CHAT' });
     await tapId('tab.chat');
     await expect(await waitForId('chat.screen')).toBeVisible();
     await expect(await waitForId('chat.badge-strip')).toBeVisible();

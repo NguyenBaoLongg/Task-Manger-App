@@ -1,9 +1,39 @@
 import { by, device, element, expect } from 'detox';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { readDetoxEnv, signInToDashboard, tapId, waitForId } from './helpers';
+
+const APP_ID = 'com.adsup.mobile';
+
+/**
+ * Detox installs the Android app with all runtime permissions granted, so the camera-denied
+ * surface this test is named for never renders unless the permission is revoked first. Detox's
+ * `launchApp({ permissions })` option is iOS-only, so Android has to go through adb.
+ *
+ * Revoking kills the app process, so the relaunch that follows must not reinstall — a reinstall
+ * would grant the permission back and put the test straight into the camera preview.
+ */
+const revokeCameraPermission = () => {
+  if (device.getPlatform() !== 'android') return;
+
+  const sdkRoot = readDetoxEnv('ANDROID_HOME') || readDetoxEnv('ANDROID_SDK_ROOT');
+  const adb = sdkRoot ? join(sdkRoot, 'platform-tools', 'adb') : 'adb';
+
+  execFileSync(adb, [
+    '-s',
+    device.id,
+    'shell',
+    'pm',
+    'revoke',
+    APP_ID,
+    'android.permission.CAMERA',
+  ]);
+};
 
 describe('attendance and approval smoke', () => {
   it('covers camera-denied entry, leave submission and approval decision surfaces', async () => {
-    await signInToDashboard({ 'ui-test-profile': 'US3_ATTENDANCE_APPROVAL' });
+    revokeCameraPermission();
+    await signInToDashboard({ 'ui-test-profile': 'US3_ATTENDANCE_APPROVAL' }, { delete: false });
 
     await tapId('dashboard.attendance-button');
     await waitForId('attendance.screen');

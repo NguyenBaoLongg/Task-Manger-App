@@ -12,8 +12,14 @@ type PerformanceSample = {
   run: number;
 };
 
-const waitForVisible = async (testID: string) => {
-  const target = element(by.id(testID));
+/**
+ * `workspace.option` and `branch.option` are rendered once per row, so against seeded data the
+ * matcher resolves to several views and Detox fails the interaction. Selecting a row keeps the
+ * measurement on the flow under test instead of on an ambiguous matcher. `atIndex(0)` is also
+ * correct when a single view matches.
+ */
+const waitForVisible = async (testID: string, index = 0) => {
+  const target = element(by.id(testID)).atIndex(index);
 
   await waitFor(target).toBeVisible().withTimeout(VISIBILITY_TIMEOUT_MS);
 
