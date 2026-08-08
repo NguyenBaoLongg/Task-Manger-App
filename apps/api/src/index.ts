@@ -269,7 +269,15 @@ const app = createApp({
   },
 });
 const http = createServer(app);
-socketHolder.current = createSocketGateway(http, tokens, authRepo, chatRepo, chatService, metrics);
+socketHolder.current = createSocketGateway(
+  http,
+  tokens,
+  authRepo,
+  chatRepo,
+  chatService,
+  rbacRepo,
+  metrics,
+);
 const closeBackplane = await configureBackplane(
   socketHolder.current,
   config.realtimeBackplane,

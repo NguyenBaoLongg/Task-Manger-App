@@ -1,7 +1,11 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import { z } from 'zod';
-import type { AuthTenantsRepository, ChatNotificationsRepository } from '@adsup/database';
+import type {
+  AuthTenantsRepository,
+  ChatNotificationsRepository,
+  OrganizationRbacRepository,
+} from '@adsup/database';
 import type { TokenService } from '../modules/auth/token-service.js';
 import type { ChatService } from '../modules/chat/chat-service.js';
 
@@ -22,6 +26,7 @@ export function createSocketGateway(
   authRepo: AuthTenantsRepository,
   chatRepo: ChatNotificationsRepository,
   chat: ChatService,
+  rbacRepo: OrganizationRbacRepository,
   telemetry?: { increment(name: string): void },
 ) {
   const io = new Server(http, {
@@ -65,6 +70,8 @@ export function createSocketGateway(
             socket.data.principal.userId as string,
           );
           if (!membership || membership.status !== 'ACTIVE') throw new Error('denied');
+          if (!(await rbacRepo.hasPermission(parsed.tenantId, membership.id, 'chat.read')))
+            throw new Error('denied');
           const channels = await chatRepo.listChannels(parsed.tenantId, membership.id);
           if (!channels.some((item) => item.id === parsed.channelId)) throw new Error('denied');
           await socket.join(channelRoom(parsed.tenantId, parsed.channelId));
@@ -90,6 +97,8 @@ export function createSocketGateway(
             socket.data.principal.userId as string,
           );
           if (!membership || membership.status !== 'ACTIVE') throw new Error('denied');
+          if (!(await rbacRepo.hasPermission(parsed.tenantId, membership.id, 'chat.write')))
+            throw new Error('denied');
           acknowledge({
             ok: true,
             message: await chat.send({ ...parsed, actorMembershipId: membership.id }),
