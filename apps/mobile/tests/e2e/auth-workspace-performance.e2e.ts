@@ -1,4 +1,5 @@
 import { by, device, element, waitFor } from 'detox';
+import jestExpect from 'expect';
 
 const RUN_COUNT = 20;
 const PASS_THRESHOLD = 19;
@@ -84,6 +85,9 @@ describe('SC-001 login/workspace performance', () => {
       })}\n`,
     );
 
-    expect(passCount).toBeGreaterThanOrEqual(PASS_THRESHOLD);
+    // Detox replaces the global `expect` with its own matcher API, which rejects a plain number.
+    // The 20 measured runs all completed before this line and their samples were already emitted;
+    // only the verdict was lost. Jest's `expect` is imported directly so the result is asserted.
+    jestExpect(passCount).toBeGreaterThanOrEqual(PASS_THRESHOLD);
   });
 });

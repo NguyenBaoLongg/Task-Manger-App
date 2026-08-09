@@ -1,4 +1,5 @@
 import { device } from 'detox';
+import jestExpect from 'expect';
 import { emitDetoxMetric, signInToDashboard, waitForId } from './helpers';
 
 const RUN_COUNT = 20;
@@ -73,8 +74,10 @@ describe('SC-003 dashboard performance', () => {
       samples,
     });
 
+    // Detox replaces the global `expect` with its own matcher API, which rejects a plain number.
+    // Jest's `expect` is imported directly so the per-profile verdict is actually asserted.
     for (const profile of profiles) {
-      expect(byProfile[profile]).toBeGreaterThanOrEqual(PASS_THRESHOLD);
+      jestExpect(byProfile[profile]).toBeGreaterThanOrEqual(PASS_THRESHOLD);
     }
   });
 });
