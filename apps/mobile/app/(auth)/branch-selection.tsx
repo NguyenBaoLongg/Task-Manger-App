@@ -8,7 +8,10 @@ import { getAuthenticatedClient } from '@/features/auth/session-runtime';
 import { selectBranch, type Branch } from '@/features/workspace/workspace-queries';
 import { createBranchScope } from '@/features/workspace/branch-scope';
 import { useTenantContextStore } from '@/tenant/tenant-context-store';
+import { createWorkspaceSelectionStorage } from '@/tenant/workspace-selection-storage';
 import { LoadingState, ErrorState } from '@/components/async-states/AsyncState';
+
+const selectionStorage = createWorkspaceSelectionStorage();
 
 export default function BranchSelectionScreen() {
   const { tenantId, membershipId } = useLocalSearchParams<{
@@ -68,6 +71,9 @@ export default function BranchSelectionScreen() {
                   branch.id,
                 ),
               );
+              // Remember the choice so a relaunch lands on the dashboard instead of asking again.
+              // Only the identifiers are stored; membership and scope are re-read on restore.
+              void selectionStorage.save({ tenantId, branchId: branch.id });
               router.replace('/(tabs)/dashboard');
             }}
           >
