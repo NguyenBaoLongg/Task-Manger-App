@@ -11,6 +11,17 @@ const androidBuildCommand =
     ? 'cd android && gradlew.bat assembleDebug assembleAndroidTest -DtestBuildType=debug'
     : 'cd android && ./gradlew assembleDebug assembleAndroidTest -DtestBuildType=debug';
 
+/**
+ * Release-fidelity build. `releaseE2e` inherits `release`, so the JS bundle is embedded in the APK
+ * and no Metro round trip happens at launch — which is the only way SC-001 and SC-003 measure the
+ * configuration users actually receive. `adsupTestBuildType` moves `assembleAndroidTest` onto the
+ * same variant so the instrumentation APK matches the app under test.
+ */
+const androidReleaseBuildCommand =
+  process.platform === 'win32'
+    ? 'cd android && gradlew.bat assembleReleaseE2e assembleReleaseE2eAndroidTest -PadsupTestBuildType=releaseE2e'
+    : 'cd android && ./gradlew assembleReleaseE2e assembleReleaseE2eAndroidTest -PadsupTestBuildType=releaseE2e';
+
 module.exports = {
   testRunner: {
     args: {
@@ -32,6 +43,13 @@ module.exports = {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/debug/app-debug.apk',
       build: androidBuildCommand,
+    },
+    'android.release': {
+      type: 'android.apk',
+      binaryPath: 'android/app/build/outputs/apk/releaseE2e/app-releaseE2e.apk',
+      testBinaryPath:
+        'android/app/build/outputs/apk/androidTest/releaseE2e/app-releaseE2e-androidTest.apk',
+      build: androidReleaseBuildCommand,
     },
   },
   devices: {
@@ -90,6 +108,18 @@ module.exports = {
       device: 'tabletEmulator',
       app: 'android.debug',
       launchArgs: darkLaunchArgs,
+    },
+    // Performance criteria must run against the embedded-bundle build; a debug APK pays a Metro
+    // fetch on every launch, which is not what a user experiences.
+    'android.phone.release': {
+      device: 'emulator',
+      app: 'android.release',
+      launchArgs: lightLaunchArgs,
+    },
+    'android.tablet.release': {
+      device: 'tabletEmulator',
+      app: 'android.release',
+      launchArgs: lightLaunchArgs,
     },
     'ios.sim.debug': { device: 'simulator', app: 'ios.debug', launchArgs: lightLaunchArgs },
     'android.emu.debug': { device: 'emulator', app: 'android.debug', launchArgs: lightLaunchArgs },

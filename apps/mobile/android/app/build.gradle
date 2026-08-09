@@ -122,7 +122,20 @@ android {
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
         }
+        // Release fidelity for end-to-end measurement: the JS bundle is embedded in the APK exactly
+        // as it is for `release`, so SC-001 and SC-003 are measured without a Metro round trip.
+        // The only difference is a network security config permitting cleartext to the loopback
+        // aliases an emulator uses to reach the developer's API. The shipping `release` variant is
+        // left untouched, so no test affordance is published.
+        releaseE2e {
+            initWith release
+            matchingFallbacks = ['release']
+            signingConfig signingConfigs.debug
+        }
     }
+    // `assembleAndroidTest` follows this build type. It stays on debug unless a build asks for the
+    // release-fidelity variant, so ordinary local runs are unaffected.
+    testBuildType = (findProperty('adsupTestBuildType') ?: 'debug')
     packagingOptions {
         jniLibs {
             def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'false'

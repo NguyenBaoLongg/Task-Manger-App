@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext is permitted only for the addresses that reach a developer machine from an emulator or
+  an adb-forwarded device. Every other destination keeps the platform default, which rejects HTTP.
+
+  This file belongs to the releaseE2e variant only. The shipping `release` variant does not include
+  it, so the published app carries no relaxed transport rule.
+-->
+<network-security-config>
+  <domain-config cleartextTrafficPermitted="true">
+    <!-- The emulator's alias for the host loopback interface. -->
+    <domain includeSubdomains="false">10.0.2.2</domain>
+    <!-- Reached through `adb reverse` on an emulator or a physical device. -->
+    <domain includeSubdomains="false">localhost</domain>
+    <domain includeSubdomains="false">127.0.0.1</domain>
+  </domain-config>
+</network-security-config>
