@@ -30,6 +30,28 @@ export const readDetoxEnv = (key: string): string => {
   return typeof value === 'string' ? value : '';
 };
 
+const RESTORE_PROBE_TIMEOUT_MS = 8_000;
+
+/** Whether a view becomes visible within the probe window, without failing the test if it does not. */
+const becomesVisible = async (testID: string, timeout: number) => {
+  try {
+    await waitFor(element(by.id(testID)).atIndex(0))
+      .toBeVisible()
+      .withTimeout(timeout);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Reaches the dashboard from whatever state the launch leaves the app in.
+ *
+ * A launch with `delete: false` keeps the stored session and workspace selection, so the app now
+ * restores straight to the dashboard and never shows the sign-in screen. Driving the sign-in taps
+ * unconditionally therefore failed on every relaunch that did not reinstall. Probing first keeps
+ * both paths working: a fresh install still signs in, a warm relaunch is simply already there.
+ */
 export const signInToDashboard = async (
   launchArgs: Record<string, string> = {},
   options: { delete?: boolean } = {},
@@ -39,6 +61,8 @@ export const signInToDashboard = async (
     launchArgs,
     newInstance: true,
   });
+
+  if (await becomesVisible('dashboard.screen', RESTORE_PROBE_TIMEOUT_MS)) return;
 
   await tapId('auth.sign-in');
   await tapId('workspace.option');
