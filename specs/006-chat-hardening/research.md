@@ -122,37 +122,58 @@ constraint is the Constitution's rule that a module gate opens only when no work
 | 002 OKR/KPI engine | Delivered | — |
 | 003 timekeeping/workflows | Delivered | — |
 | 004 booking/export | Delivered | — |
-| 005 mobile frontend | **Open** | 8 tasks, all requiring a native runtime |
+| 005 mobile frontend | **Open** | Documentation of results; no work is blocked |
 | 006 chat hardening | Specified and planned | Implementation gated |
 
-**The single blocker**: Module 5's eight open tasks all need Detox to execute against a device.
-Detox 20.51.4 fails against React Native 0.81 in bridgeless mode — the idling-resource factory
-requests a React context that the New Architecture no longer exposes, so the app disconnects
-during launch. The Android emulator problem that previously masked this is resolved; the host now
-boots a working Android 14 image, and the backend, database and bundler all run. The remaining
-obstacle is the tooling incompatibility alone.
+**Correction to an earlier version of this document.** This section previously stated that Module
+5's eight open tasks were blocked by an incompatibility between Detox 20.51.4 and React Native
+0.81 in bridgeless mode, and ranked three options for working around it. That diagnosis was wrong
+and has been withdrawn. Detox 20.51.4 supports the New Architecture: `getCurrentReactContext`
+branches on `isFabricEnabled()` and reads `reactHost.currentReactContext` on the bridgeless path.
+
+The real cause was one layer down and had nothing to do with Detox. Following the symptom through:
+
+| Layer | What it reported |
+|---|---|
+| Detox | `ReactContext is null` |
+| React Native | `Unable to load script` — the JS bundle never loaded |
+| App | Looked for Metro at `10.0.2.2:8081`, the emulator's host alias |
+| Emulator network | `ping 10.0.2.2` → `Network is unreachable` |
+| Interfaces | `eth0` and `wlan0` absent from `ip -br addr`; only loopback present |
+
+The emulator booted with a dead network stack, so nothing could reach the bundler. Restarting the
+emulator restored `eth0` and `wlan0` and the whole chain worked. `adb reverse` was never involved —
+the app chooses the `10.0.2.2` alias on its own, so the tunnels set up earlier were never used.
+
+The lesson worth keeping: the topmost error named the wrong component. Three layers of plausible
+blame — Detox, then the New Architecture, then the bundler — sat above a host networking failure.
+
+**Outcome**: with the network fixed the Detox suite ran and exposed three test defects that had
+never been observable, all now fixed. The suite stands at 7 suites and 10 tests passing on
+Android 14 against the seeded Module 1-4 API, and SC-001 measured 20/20 under its 60s limit.
 
 **Decision**: Close Module 5 before implementing Module 6.
 
 **Rationale**: Module 6 changes the same mobile chat surface Module 5's end-to-end suite is
 supposed to verify. Implementing it first means Module 5's eventual verification runs against code
-Module 5 never specified, and the two modules' evidence becomes impossible to separate.
+Module 5 never specified, and the two modules' evidence becomes impossible to separate. This
+rationale is unaffected by the correction above — only the reason Module 5 was still open changed,
+not the ordering argument.
 
-**Options for unblocking Module 5**, in the order they should be attempted:
+**Separately tracked, now resolved**: the worker logged a repeated Prisma validation failure on
+every tick. It turned out to be more serious than "does not block chat" suggested.
 
-1. *Upgrade Detox to a release that supports bridgeless mode*. Cheapest to test and preserves the
-   shipping configuration. Availability is unverified; a version check is the first task.
-2. *Build the end-to-end target with the New Architecture disabled*. Known to work, but the
-   measured build then differs from the shipped one. Acceptable only if the verification record
-   states it explicitly, and only for the criteria that are not latency measurements — the New
-   Architecture exists to change performance, so latency numbers taken without it are pessimistic
-   and cannot certify the shipped build.
-3. *Record the eight tasks as blocked on a third-party incompatibility*. Honest, but leaves the
-   module gate closed indefinitely.
+`claimDayRun` and `claimMonthRun` accept `leaseOwner`, `now` and `leaseDurationMs` alongside the
+job-run columns and forwarded the whole object to `ensureDayRun`/`ensureMonthRun`, which spread it
+into Prisma's `create`. TypeScript allowed it because excess-property checking applies to object
+literals, not to a variable widened at the call site. `now` and `leaseDurationMs` are not columns,
+so every attendance tick threw.
 
-Option 1 is attempted first because it is the only one that keeps the verified build and the
-shipped build identical.
+The attendance scheduler runs **before** the outbox dispatcher in the same tick, so the throw meant
+the dispatcher never ran at all. The outbox had 85 events stranded in `PENDING`, the oldest from
+2026-07-26 — no realtime action-item update, KPI progress event or push notification had been
+delivered since. After the fix the queue drained to 0 pending and 88 sent, and the first
+`attendance_job_runs` rows were created.
 
-**Separately tracked**: the worker logs a repeated Prisma validation failure on its tick. It does
-not block chat or the mobile end-to-end path, so it is not folded into this feature, but it should
-not be lost — it belongs in Module 5's remaining defect list, not here.
+The existing unit test did not catch it because its `upsert` mock ignored its arguments entirely.
+A regression test now asserts the exact `create` key set for both methods.

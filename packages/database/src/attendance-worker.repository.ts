@@ -6,6 +6,13 @@ import type { CheckInReminderMessage, PendingCheckInReminderRecipient } from '@a
 export class AttendanceWorkerRepository {
   constructor(private readonly db: DatabaseClient) {}
 
+  /**
+   * `create` lists its columns explicitly instead of spreading `input`. Callers such as
+   * `claimDayRun` pass a wider object that also carries `leaseOwner`, `now` and
+   * `leaseDurationMs`; TypeScript accepts that because excess-property checking applies only to
+   * object literals, so a spread forwarded `now` and `leaseDurationMs` — which are not columns —
+   * straight into Prisma and every call threw PrismaClientValidationError.
+   */
   ensureDayRun(input: {
     tenantId: string;
     jobType: string;
@@ -21,10 +28,17 @@ export class AttendanceWorkerRepository {
         },
       },
       update: {},
-      create: { ...input, id: randomUUID() },
+      create: {
+        id: randomUUID(),
+        tenantId: input.tenantId,
+        jobType: input.jobType,
+        businessDate: input.businessDate,
+        correlationId: input.correlationId,
+      },
     });
   }
 
+  /** Same explicit-column rule as `ensureDayRun`; `claimMonthRun` passes the same wider object. */
   ensureMonthRun(input: {
     tenantId: string;
     jobType: string;
@@ -40,7 +54,13 @@ export class AttendanceWorkerRepository {
         },
       },
       update: {},
-      create: { ...input, id: randomUUID() },
+      create: {
+        id: randomUUID(),
+        tenantId: input.tenantId,
+        jobType: input.jobType,
+        yearMonth: input.yearMonth,
+        correlationId: input.correlationId,
+      },
     });
   }
 

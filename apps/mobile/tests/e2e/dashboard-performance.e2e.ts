@@ -35,7 +35,14 @@ const runDashboardSample = async (profile: DashboardProfile, run: number): Promi
   return Date.now() - startedAt;
 };
 
-jest.setTimeout(1_800_000);
+/**
+ * 60 samples (20 runs x 3 data profiles), each preceded by an untimed sign-in and, for cold
+ * starts, a reinstall. On this host that setup dominates and the suite reached 1806s against a
+ * 1800s cap, so it timed out before the aggregate was ever emitted. Only `reloadReactNative` plus
+ * the dashboard wait is measured against SC-003's 3s limit, and total suite duration is not part
+ * of the criterion, so the cap is raised rather than the sample count reduced.
+ */
+jest.setTimeout(3_600_000);
 
 describe('SC-003 dashboard performance', () => {
   it('shows first actionable dashboard data under 3 seconds for at least 19 of 20 runs per profile', async () => {

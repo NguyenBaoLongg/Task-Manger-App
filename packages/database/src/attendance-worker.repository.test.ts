@@ -135,6 +135,67 @@ describe('AttendanceWorkerRepository leases', () => {
     });
   });
 
+  it('sends only real columns to upsert when the caller passes lease fields', async () => {
+    // claimDayRun/claimMonthRun accept leaseOwner, now and leaseDurationMs and forward the whole
+    // object to ensureDayRun/ensureMonthRun. TypeScript permits that -- excess-property checking
+    // applies to object literals, not to a variable widened at the call site -- so spreading the
+    // input into `create` used to leak `now` and `leaseDurationMs` into Prisma and every
+    // attendance tick threw PrismaClientValidationError before the outbox was ever dispatched.
+    const createPayloads: Array<Record<string, unknown>> = [];
+    const database = {
+      attendanceJobRun: {
+        upsert: async (input: { create: Record<string, unknown> }) => {
+          createPayloads.push(input.create);
+          return { id: 'run-1' };
+        },
+        updateMany: async () => ({ count: 0 }),
+        findUniqueOrThrow: async () => ({ id: 'run-1' }),
+      },
+    };
+    const repository = new AttendanceWorkerRepository(database as never);
+    const now = new Date('2026-08-09T02:00:00.000Z');
+
+    await repository.claimDayRun({
+      tenantId: 'tenant-1',
+      jobType: 'ATTENDANCE_CHECKIN_REMINDER',
+      businessDate: new Date('2026-08-09T00:00:00.000Z'),
+      correlationId: 'reminder',
+      leaseOwner: 'attendance-scheduler:worker-1',
+      now,
+      leaseDurationMs: 60_000,
+    });
+    await repository.claimMonthRun({
+      tenantId: 'tenant-1',
+      jobType: 'ATTENDANCE_MONTHLY_ABSENCE',
+      yearMonth: '2026-08',
+      correlationId: 'monthly',
+      leaseOwner: 'attendance-scheduler:worker-1',
+      now,
+      leaseDurationMs: 60_000,
+    });
+
+    expect(createPayloads).toHaveLength(2);
+    for (const payload of createPayloads) {
+      expect(payload).not.toHaveProperty('now');
+      expect(payload).not.toHaveProperty('leaseDurationMs');
+      expect(payload).not.toHaveProperty('leaseOwner');
+    }
+    expect(Object.keys(createPayloads[0]).sort()).toEqual([
+      'businessDate',
+      'correlationId',
+      'id',
+      'jobType',
+      'tenantId',
+    ]);
+    expect(Object.keys(createPayloads[1]).sort()).toEqual([
+      'correlationId',
+      'id',
+      'jobType',
+      'tenantId',
+      'yearMonth',
+    ]);
+  });
+
   it('counts the in-month portion of an approved leave range that starts in the prior month', async () => {
     let queryWhere: unknown;
     let approvedDays: unknown;

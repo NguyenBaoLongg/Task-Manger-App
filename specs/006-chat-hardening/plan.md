@@ -87,9 +87,18 @@ active Spec Kit feature and one active product module at a time, and that a modu
 only when tests, typecheck, lint, build and convergence report no remaining work.
 
 **Module 5 is not closed.** Its task list stands at 127 complete and 8 open (T107, T111, T114,
-T118, T119, T132, T133, T135). Every one of them needs a working native Android or iOS runtime,
-and native end-to-end execution is currently blocked by an incompatibility between Detox 20.51.4
-and React Native 0.81 running the New Architecture in bridgeless mode.
+T118, T119, T132, T133, T135).
+
+An earlier version of this plan attributed that to an incompatibility between Detox 20.51.4 and
+React Native 0.81 in bridgeless mode. **That was wrong and is withdrawn**; Detox 20.51.4 supports
+the New Architecture. The actual cause was an emulator that booted without a working network
+stack, so the app could not reach the bundler and no JS ever loaded. See
+[research.md](./research.md) for the full trace.
+
+With that fixed the Detox suite runs: 7 suites and 10 tests pass on Android 14 against the seeded
+Module 1-4 API, T107's critical path among them, and SC-001 measured 20/20 under its 60s limit.
+Nothing in Module 5 is blocked any longer — what remains is executing the rest of the measurements
+and recording results. The module is open, not stuck.
 
 Two consequences follow, and they are deliberately recorded rather than worked around:
 
@@ -161,5 +170,5 @@ a home in the current structure.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| Planning Module 6 while Module 5 has 8 open tasks | The two chat defects lose messages and leak them to removed members. Both are live in the shipped code. Recording the design while the audit evidence is fresh costs nothing and changes no code. | Waiting for Module 5 to close was rejected only for the *planning* step, not for implementation. Module 5's remaining work is blocked on a third-party tooling incompatibility with no committed fix date, so blocking the write-up would strand the audit findings indefinitely. Implementation still waits. |
+| Planning Module 6 while Module 5 has 8 open tasks | The two chat defects lose messages and leak them to removed members. Both are live in the shipped code. Recording the design while the audit evidence is fresh costs nothing and changes no code. | Waiting for Module 5 to close was rejected only for the *planning* step, not for implementation. Module 5's remaining tasks are now executable rather than blocked, so the wait is bounded — but it is still a wait, and implementation of Module 6 does not start before the gate opens. |
 | Module 6 falls outside the Constitution's five-module order | The order was written for initial delivery and ends at the mobile frontend. Post-delivery defect remediation has no declared slot. | Folding this work into Module 5 was rejected because Module 5's spec scopes chat as build-only; these are corrections to delivered behavior plus two new capabilities, which would silently expand a module whose gate is already being measured. |
