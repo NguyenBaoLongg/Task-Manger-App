@@ -37,6 +37,11 @@ export class ChatService {
       this.repository.listMessages(tenantId, channelId, cursor),
     );
   }
+  markRead(tenantId: string, membershipId: string, channelId: string) {
+    return this.assertChannel(tenantId, membershipId, channelId).then(() =>
+      this.repository.markChannelRead(tenantId, membershipId, channelId),
+    );
+  }
   async send(input: {
     tenantId: string;
     channelId: string;

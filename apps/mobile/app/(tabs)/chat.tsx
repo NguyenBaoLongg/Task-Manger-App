@@ -1,243 +1,307 @@
-import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { AppButton, ScreenFrame, StatusPill, Surface } from '@/components/ui/ScreenPrimitives';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { getRuntimeConfig } from '@/config/runtime-config';
 import { getAuthenticatedClient, getSessionAccessToken } from '@/features/auth/session-runtime';
-import { validateMessage } from '@/features/chat/chat-composer';
-import { listChannels, listMessages, sendMessage } from '@/features/chat/chat-queries';
-import { createBadgeStore, unreadByKind, type Badge } from '@/notifications/badge-store';
+import { listChannels } from '@/features/chat/chat-queries';
+import {
+  matchesQuery,
+  toConversationRow,
+  type Conversation,
+  type ConversationRow,
+} from '@/features/chat/conversation-list';
 import { createSocketClient } from '@/realtime/socket-client';
 import { createTenantContext } from '@/tenant/tenant-context';
 import { useTenantContextStore } from '@/tenant/tenant-context-store';
 import { tokens } from '@/theme/tokens';
 
-type ChatMessage = { id: string; body?: string; createdAt?: string };
-type MessagePage = { items?: ChatMessage[]; nextCursor?: string; unreadCount?: number };
+/**
+ * Six avatar tints. A conversation without a photo still needs to be findable by shape and colour
+ * when scanning a long list, which a single grey circle does not give you.
+ */
+const AVATAR_TINTS = [
+  { background: '#E8F2FC', text: '#1268C4' },
+  { background: '#E5F5EE', text: '#147A57' },
+  { background: '#FFF3D9', text: '#A56308' },
+  { background: '#FDECEF', text: '#C23E4D' },
+  { background: '#EAF0FF', text: '#285CC4' },
+  { background: '#E5F7FD', text: '#0E7C9B' },
+] as const;
 
-const mergeMessages = (current: ChatMessage[], incoming: ChatMessage[]) => {
-  const seen = new Set(current.map((item) => item.id));
-  return [...current, ...incoming.filter((item) => !seen.has(item.id))];
+const ConversationItem = ({
+  row,
+  testID,
+  onPress,
+}: {
+  row: ConversationRow;
+  testID: string;
+  onPress: () => void;
+}) => {
+  const tint = AVATAR_TINTS[row.avatarIndex % AVATAR_TINTS.length] ?? AVATAR_TINTS[0];
+
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={
+        row.unreadCount
+          ? `${row.name}, ${row.unreadCount} tin nhắn chưa đọc. ${row.preview}`
+          : `${row.name}. ${row.preview}`
+      }
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
+      <View style={[styles.avatar, { backgroundColor: tint.background }]}>
+        <Text style={[styles.avatarText, { color: tint.text }]}>{row.initials}</Text>
+      </View>
+
+      <View style={styles.rowBody}>
+        <View style={styles.rowTop}>
+          <Text numberOfLines={1} style={styles.rowName}>
+            {row.isGroup ? '# ' : ''}
+            {row.name}
+          </Text>
+          <Text style={styles.rowTime}>{row.timeLabel}</Text>
+        </View>
+
+        <View style={styles.rowBottom}>
+          <Text
+            numberOfLines={1}
+            style={[styles.rowPreview, row.unreadCount > 0 && styles.rowPreviewUnread]}
+          >
+            {row.preview}
+          </Text>
+          {row.unreadCount > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>
+                {row.unreadCount > 99 ? '99+' : row.unreadCount}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
+  );
 };
 
 export default function ChatScreen() {
-  const [message, setMessage] = useState('');
-  const [channelId, setChannelId] = useState<string>();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [nextCursor, setNextCursor] = useState<string>();
-  const [badges, setBadges] = useState<Badge[]>([]);
-  const [error, setError] = useState<string>();
-  const badgeStore = useMemo(() => createBadgeStore(), []);
+  const router = useRouter();
   const context = useTenantContextStore((state) => state.context);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [query, setQuery] = useState('');
+  const [error, setError] = useState<string>();
+  const [loaded, setLoaded] = useState(false);
 
-  const refreshBadges = () => setBadges(badgeStore.snapshot());
-
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!context) return;
-    const scopedContext = createTenantContext(context);
-    let active = true;
-    let stop: () => void = () => undefined;
-    void getAuthenticatedClient()
-      .then((client) =>
-        listChannels(client, context.tenantId).then((channels) => {
-          const first = Array.isArray(channels)
-            ? (channels[0] as { id?: string } | undefined)
-            : undefined;
-          if (!first?.id) return undefined;
-          setChannelId(first.id);
-          return listMessages(client, context.tenantId, first.id);
-        }),
-      )
-      .then((page) => {
-        const value = page as MessagePage | undefined;
-        if (active) {
-          setMessages(value?.items ?? []);
-          setNextCursor(value?.nextCursor);
-          for (let index = 0; index < (value?.unreadCount ?? 0); index += 1)
-            badgeStore.add({ effectKey: `chat-page-${index}`, kind: 'CHAT' });
-          refreshBadges();
-        }
-        const socket = createSocketClient({
-          baseUrl: getRuntimeConfig().apiBaseUrl,
-          getAccessToken: getSessionAccessToken,
-          context: scopedContext,
-        });
-        socket.connect();
-        stop = socket.on('message:created', (payload) => {
-          const item = payload as ChatMessage;
-          if (!item.id) return;
-          badgeStore.add({ effectKey: `chat-${item.id}`, kind: 'CHAT' });
-          refreshBadges();
-          setMessages((current) => mergeMessages(current, [item]));
-        });
-      })
-      .catch(() => {
-        if (active) setError('Could not load chat channels.');
-      });
-    return () => {
-      active = false;
-      stop();
-    };
-  }, [context, badgeStore]);
-
-  const loadMore = async () => {
-    if (!context || !channelId || !nextCursor) return;
-    const client = await getAuthenticatedClient();
-    const page = (await listMessages(
-      client,
-      context.tenantId,
-      channelId,
-      nextCursor,
-    )) as MessagePage;
-    setMessages((current) => mergeMessages(current, page.items ?? []));
-    setNextCursor(page.nextCursor);
-  };
-
-  const submit = async () => {
-    if (!context || !channelId) return;
     try {
-      const body = validateMessage(message);
       const client = await getAuthenticatedClient();
-      await sendMessage(client, context.tenantId, channelId, {
-        clientMessageId: `mobile-${Date.now()}`,
-        body,
-        idempotencyKey: `chat-${Date.now()}`,
-      });
-      setMessage('');
+      const channels = (await listChannels(client, context.tenantId)) as Conversation[];
+      setConversations(Array.isArray(channels) ? channels : []);
       setError(undefined);
     } catch {
-      setError('Message was not sent. Check the content and try again.');
+      setError('Không tải được danh sách trò chuyện.');
+    } finally {
+      setLoaded(true);
     }
-  };
+  }, [context]);
 
-  const markRead = () => {
-    for (const badge of badgeStore.snapshot()) badgeStore.markRead(badge.effectKey);
-    refreshBadges();
-  };
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const unreadCounts = unreadByKind(badges);
+  // A conversation list is only correct while it keeps up. Any incoming message reorders the list
+  // and moves an unread count, so the socket refreshes it rather than the user pulling to refresh.
+  useEffect(() => {
+    if (!context) return;
+    const socket = createSocketClient({
+      baseUrl: getRuntimeConfig().apiBaseUrl,
+      getAccessToken: getSessionAccessToken,
+      context: createTenantContext(context),
+    });
+    socket.connect();
+    const stop = socket.on('message:created', () => {
+      void load();
+    });
+    return () => stop();
+  }, [context, load]);
+
+  const rows = useMemo(() => {
+    const viewerMembershipId = context?.membershipId;
+    return conversations
+      .map((conversation) => toConversationRow(conversation, { viewerMembershipId }))
+      .filter((row) => matchesQuery(row, query));
+  }, [conversations, context?.membershipId, query]);
+
+  const totalUnread = rows.reduce((sum, row) => sum + row.unreadCount, 0);
 
   return (
-    <ScreenFrame
-      testID="chat.screen"
-      eyebrow="ADSUP / CHAT"
-      title="Team chat"
-      subtitle="Realtime tenant chat with unread badges."
-    >
-      <View style={styles.channelHeader}>
-        <View>
-          <Text style={styles.channelName}>General channel</Text>
-          <Text style={styles.channelMeta}>{messages.length} recent messages</Text>
-        </View>
-        <StatusPill
-          label={`${unreadCounts.CHAT ?? 0} unread`}
-          tone={unreadCounts.CHAT ? 'warning' : 'success'}
+    <View testID="chat.screen" style={styles.screen}>
+      <View style={styles.header}>
+        <Text accessibilityRole="header" style={styles.headerTitle}>
+          Trò chuyện
+        </Text>
+        {totalUnread > 0 ? (
+          <View
+            testID="chat.badge-strip"
+            accessibilityLabel={`${totalUnread} tin nhắn chưa đọc`}
+            style={styles.headerBadge}
+          >
+            <Text style={styles.headerBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
+          </View>
+        ) : (
+          <View
+            testID="chat.badge-strip"
+            accessibilityLabel="Không có tin nhắn chưa đọc"
+            style={styles.headerBadgeEmpty}
+          >
+            <Text style={styles.headerBadgeEmptyText}>Đã đọc hết</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.searchWrap}>
+        <TextInput
+          testID="chat.search"
+          accessibilityLabel="Tìm kiếm trò chuyện"
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Tìm kiếm"
+          placeholderTextColor={tokens.color.muted}
+          style={styles.search}
         />
       </View>
-      <View
-        testID="chat.badge-strip"
-        accessibilityLabel={'Th\u00f4ng b\u00e1o'}
-        style={styles.notificationStrip}
+
+      <ScrollView
+        testID="chat.conversation-list"
+        accessibilityLabel="Danh sách trò chuyện"
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.notificationTitle}>Badge summary</Text>
-        <Text style={styles.notificationBody}>Chat unread: {unreadCounts.CHAT ?? 0}</Text>
-        <AppButton
-          testID="chat.mark-read"
-          label="Mark chat read"
-          variant="quiet"
-          onPress={markRead}
-          disabled={!unreadCounts.CHAT}
-        />
-      </View>
-      <Surface
-        testID="chat.message-list"
-        accessibilityLabel={'Tin nh\u1eafn'}
-        style={styles.messageSurface}
-      >
-        {messages.length ? (
-          messages.map((item, index) => (
-            <View key={item.id} style={[styles.messageRow, index > 0 && styles.messageDivider]}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>A</Text>
-              </View>
-              <View style={styles.messageBody}>
-                <Text style={styles.sender}>Workspace member</Text>
-                <Text style={styles.message}>{item.body}</Text>
-              </View>
-            </View>
+        {rows.length ? (
+          rows.map((row, index) => (
+            <ConversationItem
+              key={row.id}
+              row={row}
+              // Seeded channel ids change per run, so the first row carries a positional testID that
+              // an E2E test can rely on. Every row also keeps its id-based one.
+              testID={index === 0 ? 'chat.conversation-list.first' : `chat.conversation.${row.id}`}
+              onPress={() => router.push(`/chat/${row.id}`)}
+            />
           ))
         ) : (
-          <Text style={styles.empty}>No messages yet.</Text>
+          <Text style={styles.empty}>
+            {!loaded
+              ? 'Đang tải...'
+              : query.trim()
+                ? 'Không tìm thấy cuộc trò chuyện nào.'
+                : 'Chưa có cuộc trò chuyện nào.'}
+          </Text>
         )}
-        {nextCursor ? (
-          <AppButton label="Load more" variant="secondary" onPress={() => void loadMore()} />
-        ) : null}
-      </Surface>
-      <Surface style={styles.composer}>
-        <TextInput
-          accessibilityLabel="Compose message"
-          testID="chat.composer"
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Write a message..."
-          placeholderTextColor={tokens.color.muted}
-          multiline
-          style={styles.input}
-        />
-        <AppButton
-          testID="chat.send"
-          label="Send message"
-          onPress={() => void submit()}
-          disabled={!message.trim()}
-        />
-      </Surface>
+      </ScrollView>
+
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
         </Text>
       ) : null}
-    </ScreenFrame>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  channelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  channelName: { color: tokens.color.ink, fontSize: tokens.typography.heading, fontWeight: '800' },
-  channelMeta: { color: tokens.color.muted, fontSize: tokens.typography.bodySmall, marginTop: 4 },
-  notificationStrip: {
-    padding: tokens.spacing.md,
-    borderRadius: tokens.radius.md,
-    backgroundColor: tokens.color.infoSoft,
-    gap: 4,
+  screen: { flex: 1, backgroundColor: tokens.color.surface },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: tokens.spacing.lg,
+    paddingTop: tokens.spacing.xxl + tokens.spacing.md,
+    paddingBottom: tokens.spacing.md,
   },
-  notificationTitle: {
-    color: tokens.color.info,
-    fontSize: tokens.typography.bodySmall,
+  headerTitle: { color: tokens.color.ink, fontSize: tokens.typography.title, fontWeight: '800' },
+  headerBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    backgroundColor: tokens.color.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBadgeText: {
+    color: tokens.color.inkInverted,
+    fontSize: tokens.typography.label,
     fontWeight: '800',
   },
-  notificationBody: { color: tokens.color.muted, fontSize: tokens.typography.bodySmall },
-  messageSurface: { gap: 14, minHeight: 180 },
-  messageRow: { flexDirection: 'row', gap: tokens.spacing.md, paddingVertical: 4 },
-  messageDivider: { borderTopWidth: 1, borderTopColor: tokens.color.border, paddingTop: 14 },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: tokens.color.infoSoft,
-    justifyContent: 'center',
+  headerBadgeEmpty: {
+    paddingHorizontal: 10,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: tokens.color.successSoft,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  avatarText: { color: tokens.color.info, fontWeight: '800' },
-  messageBody: { flex: 1, gap: 4 },
-  sender: { color: tokens.color.muted, fontSize: tokens.typography.label, fontWeight: '700' },
-  message: { color: tokens.color.ink, fontSize: tokens.typography.body, lineHeight: 22 },
-  empty: { color: tokens.color.muted, fontSize: tokens.typography.body, lineHeight: 22 },
-  composer: { gap: tokens.spacing.md },
-  input: {
-    minHeight: 72,
+  headerBadgeEmptyText: {
+    color: tokens.color.success,
+    fontSize: tokens.typography.label,
+    fontWeight: '700',
+  },
+  searchWrap: { paddingHorizontal: tokens.spacing.lg, paddingBottom: tokens.spacing.md },
+  search: {
+    height: tokens.touchTarget,
+    borderRadius: tokens.touchTarget / 2,
+    paddingHorizontal: tokens.spacing.lg,
+    backgroundColor: tokens.color.surfaceMuted,
     color: tokens.color.ink,
     fontSize: tokens.typography.body,
-    lineHeight: 22,
-    textAlignVertical: 'top',
   },
-  error: { color: tokens.color.danger, fontSize: tokens.typography.bodySmall },
+  listContent: { paddingBottom: tokens.spacing.xl },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.md,
+    paddingVertical: 10,
+    paddingHorizontal: tokens.spacing.lg,
+    minHeight: 68,
+  },
+  rowPressed: { backgroundColor: tokens.color.surfaceMuted },
+  avatar: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: tokens.typography.body, fontWeight: '800' },
+  rowBody: { flex: 1, gap: 4 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm },
+  rowName: {
+    flex: 1,
+    color: tokens.color.ink,
+    fontSize: tokens.typography.body,
+    fontWeight: '700',
+  },
+  rowTime: { color: tokens.color.muted, fontSize: tokens.typography.label },
+  rowBottom: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm },
+  rowPreview: { flex: 1, color: tokens.color.muted, fontSize: tokens.typography.bodySmall },
+  rowPreviewUnread: { color: tokens.color.ink },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: tokens.color.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadText: {
+    color: tokens.color.inkInverted,
+    fontSize: tokens.typography.label,
+    fontWeight: '800',
+  },
+  empty: {
+    color: tokens.color.muted,
+    fontSize: tokens.typography.body,
+    padding: tokens.spacing.lg,
+  },
+  error: {
+    color: tokens.color.danger,
+    fontSize: tokens.typography.bodySmall,
+    padding: tokens.spacing.lg,
+  },
 });

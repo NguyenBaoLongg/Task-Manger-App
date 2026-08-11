@@ -13,6 +13,10 @@ export const listMessages = (
     .request(
       `/channels/${encodeURIComponent(channelId)}/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
     );
+export const markChannelRead = (client: ApiClient, tenantId: string, channelId: string) =>
+  client
+    .tenant(tenantId)
+    .request(`/channels/${encodeURIComponent(channelId)}/read`, { method: 'POST' });
 export const sendMessage = (
   client: ApiClient,
   tenantId: string,

@@ -4,18 +4,98 @@ import { decodeTimeCursor, encodeTimeCursor } from './cursor.js';
 
 export class ChatNotificationsRepository {
   constructor(private readonly db: DatabaseClient) {}
+  /**
+   * A conversation list needs more than the channel row: which message was last, who wrote it, and
+   * how many the caller has not read. Without those a client can only render names, which is why the
+   * mobile chat tab previously jumped straight into the first channel.
+   *
+   * Ordering is by last activity rather than creation, because a conversation list is only useful
+   * when the channel someone just wrote in is at the top.
+   *
+   * The per-channel queries are issued together. Channel counts here are in the tens — a member
+   * belongs to their branch channel, the tenant general channel and a handful of groups — so the
+   * clarity is worth more than folding this into one hand-written aggregate.
+   */
   async listChannels(tenantId: string, membershipId: string) {
     const memberships = await this.db.chatChannelMembership.findMany({
       where: { tenantId, membershipId, leftAt: null },
-      select: { channelId: true },
+      select: { channelId: true, lastReadMessageId: true },
     });
-    return this.db.chatChannel.findMany({
+    const lastReadByChannel = new Map(
+      memberships.map((item) => [item.channelId, item.lastReadMessageId]),
+    );
+    const channels = await this.db.chatChannel.findMany({
       where: {
         tenantId,
         OR: [{ type: 'TENANT_GENERAL' }, { id: { in: memberships.map((item) => item.channelId) } }],
       },
-      orderBy: { createdAt: 'asc' },
     });
+
+    const decorated = await Promise.all(
+      channels.map(async (channel) => {
+        const lastMessage = await this.db.chatMessage.findFirst({
+          where: { tenantId, channelId: channel.id, deletedAt: null },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        });
+
+        // A membership row carries the read marker. `TENANT_GENERAL` is visible without one, so a
+        // missing marker means nothing has been read and every message counts as unread.
+        const lastReadMessageId = lastReadByChannel.get(channel.id) ?? null;
+        const lastRead = lastReadMessageId
+          ? await this.db.chatMessage.findUnique({
+              where: { tenantId_id: { tenantId, id: lastReadMessageId } },
+              select: { createdAt: true },
+            })
+          : null;
+
+        const unreadCount = await this.db.chatMessage.count({
+          where: {
+            tenantId,
+            channelId: channel.id,
+            deletedAt: null,
+            // Messages the caller wrote are never unread to the caller.
+            authorMembershipId: { not: membershipId },
+            ...(lastRead ? { createdAt: { gt: lastRead.createdAt } } : {}),
+          },
+        });
+
+        return {
+          ...channel,
+          lastMessage: lastMessage
+            ? {
+                id: lastMessage.id,
+                body: lastMessage.body,
+                authorMembershipId: lastMessage.authorMembershipId,
+                authorDisplayName: lastMessage.authorDisplayNameSnapshot,
+                createdAt: lastMessage.createdAt,
+              }
+            : null,
+          unreadCount,
+          lastActivityAt: lastMessage?.createdAt ?? channel.createdAt,
+        };
+      }),
+    );
+
+    return decorated.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+  }
+
+  /**
+   * Moves the caller's read marker to a message they have seen. The marker only ever moves forward:
+   * reopening an older conversation must not resurrect unread counts that were already cleared.
+   */
+  async markChannelRead(tenantId: string, membershipId: string, channelId: string) {
+    const latest = await this.db.chatMessage.findFirst({
+      where: { tenantId, channelId, deletedAt: null },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+    if (!latest) return { lastReadMessageId: null };
+
+    await this.db.chatChannelMembership.updateMany({
+      where: { tenantId, channelId, membershipId, leftAt: null },
+      data: { lastReadMessageId: latest.id },
+    });
+    return { lastReadMessageId: latest.id };
   }
   createChannel(data: {
     tenantId: string;

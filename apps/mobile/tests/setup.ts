@@ -12,7 +12,11 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(),
 }));
 
-jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
-  useLocalSearchParams: jest.fn(() => ({})),
-}));
+jest.mock('expo-router', () => {
+  const router = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
+  return {
+    router,
+    useRouter: jest.fn(() => router),
+    useLocalSearchParams: jest.fn(() => ({})),
+  };
+});

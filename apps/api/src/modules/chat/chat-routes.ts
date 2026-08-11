@@ -93,6 +93,22 @@ export function chatRoutes(
       });
     },
   );
+  // Clearing an unread badge is a read-side act on a channel the caller can already read, so it is
+  // gated by `chat.read` rather than `chat.write`. It moves only the caller's own marker.
+  router.post(
+    '/tenants/:tenantId/channels/:channelId/read',
+    auth,
+    scoped,
+    requirePermission(rbacRepo, 'chat.read'),
+    async (request: AuthenticatedRequest, response) =>
+      response.json(
+        await service.markRead(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+          String(request.params.channelId),
+        ),
+      ),
+  );
   router.post(
     '/tenants/:tenantId/channels/:channelId/messages',
     auth,
