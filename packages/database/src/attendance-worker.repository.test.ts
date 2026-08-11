@@ -180,14 +180,14 @@ describe('AttendanceWorkerRepository leases', () => {
       expect(payload).not.toHaveProperty('leaseDurationMs');
       expect(payload).not.toHaveProperty('leaseOwner');
     }
-    expect(Object.keys(createPayloads[0]).sort()).toEqual([
+    expect(Object.keys(createPayloads[0] ?? {}).sort()).toEqual([
       'businessDate',
       'correlationId',
       'id',
       'jobType',
       'tenantId',
     ]);
-    expect(Object.keys(createPayloads[1]).sort()).toEqual([
+    expect(Object.keys(createPayloads[1] ?? {}).sort()).toEqual([
       'correlationId',
       'id',
       'jobType',

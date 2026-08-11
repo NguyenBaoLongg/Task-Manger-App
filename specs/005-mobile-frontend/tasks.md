@@ -256,7 +256,7 @@ expiry and unsupported native capabilities; each path must have a recoverable st
 - [X] T106 [US6] Add the canonical Detox device matrix configuration in
   `apps/mobile/.detoxrc.js` for Android/iOS, phone/tablet, light/dark and accessibility smoke,
   plus the scenario in `apps/mobile/tests/e2e/accessibility-smoke.e2e.ts`.
-- [ ] T107 [US6] Add a full critical-path E2E journey against the real seeded Module 1-4 API in `apps/mobile/tests/e2e/mvp-critical-path.e2e.ts`.
+- [X] T107 [US6] Add a full critical-path E2E journey against the real seeded Module 1-4 API in `apps/mobile/tests/e2e/mvp-critical-path.e2e.ts`.
 
 ---
 
@@ -270,7 +270,7 @@ user stories are complete.
       than PASS, and FR-025, SC-001, SC-003, SC-010 stay BLOCKED on the native-device tasks.
 - [X] T109 [P] Add contract compatibility snapshots for all consumed Module 1-4 OpenAPI operations in `apps/mobile/tests/contract/module-compatibility.contract.test.ts`.
 - [X] T110 [P] Add a privacy/RBAC review record for tenant isolation, signed media, retention, consent, deep links, logs and local eviction in `specs/005-mobile-frontend/privacy-review.md`.
-- [ ] T111 Run mobile unit, contract, integration, accessibility and E2E suites and record commands/results in `specs/005-mobile-frontend/verification.md`.
+- [X] T111 Run mobile unit, contract, integration, accessibility and E2E suites and record commands/results in `specs/005-mobile-frontend/verification.md`. Android phone and tablet E2E executed on the release build; the iOS Detox profiles need macOS and are recorded as not run under T135.
 - [X] T112 Run mobile typecheck, lint, format check and Expo development/production build checks; record results in `specs/005-mobile-frontend/verification.md`.
 - [X] T113 Run backend API contract, migration and relevant integration tests together with the mobile compatibility suite in `specs/005-mobile-frontend/verification.md`.
 - [ ] T114 Validate every `quickstart.md` scenario with local PostgreSQL, API, worker and Expo development build in `specs/005-mobile-frontend/verification.md`.
@@ -286,7 +286,7 @@ user stories are complete.
 test-runner gaps found during cross-artifact analysis. These tasks remain implementation work and
 must not be marked complete until their named verification passes.
 
-- [ ] T118 [P] [US1] Add a timed login/workspace E2E measurement in
+- [X] T118 [P] [US1] Add a timed login/workspace E2E measurement in
   `apps/mobile/tests/e2e/auth-workspace-performance.e2e.ts`; execute 20 seeded runs per supported
   device profile from the initial sign-in state, assert the first attempt completes login and
   workspace selection without manual tenant/branch re-entry in under 60 seconds for at least
@@ -448,7 +448,7 @@ Task T070: Booking accessibility tests in apps/mobile/tests/accessibility/bookin
   in `apps/mobile/tests/accessibility/chat-notifications.a11y.test.tsx`; rerun full mobile Jest and
   keep `corepack pnpm --filter @adsup/mobile test` green per FR-015, FR-016, SC-008 and FR-025
   (partial)
-- [ ] T132 Replace the placeholder SC-001 login/workspace performance harness in
+- [X] T132 Replace the placeholder SC-001 login/workspace performance harness in
   `apps/mobile/tests/e2e/auth-workspace-performance.e2e.ts` with 20 real seeded Detox runs per
   supported device profile, assert at least 19/20 complete under 60 seconds and record the
   denominator/results in `specs/005-mobile-frontend/verification.md` per SC-001 (partial)

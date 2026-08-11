@@ -56,16 +56,16 @@ Paths are relative to `apps/mobile/`. Status values:
 
 | SC | Threshold | Verifying artifact | Denominator | Status | Open task |
 |---|---|---|---|---|---|
-| SC-001 | ≥19/20 login+workspace under 60s per device profile | `tests/e2e/auth-workspace-performance.e2e.ts` | 20 per device profile | BLOCKED — harness real, numerator not recorded | T118, T132 |
+| SC-001 | ≥19/20 login+workspace under 60s per device profile | `tests/e2e/auth-workspace-performance.e2e.ts` | 20 per device profile | PASS — phone 20/20 (med 14936 ms), tablet 20/20 (med 15350 ms), release build | — |
 | SC-002 | 100% cross-tenant / out-of-branch requests denied | `tests/integration/auth-workspace.integration.test.ts`, `tests/integration/dashboard-navigation.integration.test.ts`, `tests/integration/attendance-privacy.integration.test.ts`, `tests/integration/notification-privacy.integration.test.ts` | All negative-scope cases in those suites | PASS | — |
-| SC-003 | ≥19/20 Dashboard/action center under 3s per device and data profile | `tests/e2e/dashboard-performance.e2e.ts` | 20 per device profile × `COLD_START`, `WARM_CACHE`, `DEGRADED_NETWORK` | BLOCKED — harness real, numerator not recorded | T119, T133 |
+| SC-003 | ≥19/20 Dashboard/action center under 3s per device and data profile | `tests/e2e/dashboard-performance.e2e.ts` | 20 per device profile × `COLD_START`, `WARM_CACHE`, `DEGRADED_NETWORK` | **NOT MEASURABLE AS WRITTEN** — the harness reports phone `WARM_CACHE` 20/20 (med 423 ms), `COLD_START` 0/20 (med 6867 ms), `DEGRADED_NETWORK` 0/20 (med 6432 ms), but `device.launchApp` adds ~5.7 s of Detox overhead — more than the whole 3 s budget — and `adb reverse` bypasses the throttled radio so the degraded profile duplicates cold start. The app's own cold start measures 1.3-1.9 s by three other methods | T119, T133 |
 | SC-004 | 100% forms render per FormVersion; server errors surfaced | `tests/unit/dynamic-form-renderer.test.ts`, `tests/contract/booking-forms.contract.test.ts` | Schema fixture set in those suites | PASS | — |
-| SC-005 | 100% video check-in samples with permission, preview, progress, retry | `tests/integration/attendance-video-checkin-flow.integration.test.ts`, `tests/unit/attendance-media-upload.test.ts` | Sample set in those suites | PASS under Jest; native capture not yet exercised | T111 |
+| SC-005 | 100% video check-in samples with permission, preview, progress, retry | `tests/integration/attendance-video-checkin-flow.integration.test.ts`, `tests/unit/attendance-media-upload.test.ts` | Sample set in those suites | PASS under Jest; the camera-denied path also runs on device via `tests/e2e/attendance-approval.e2e.ts`. Real video capture is still not exercised — an emulator has no camera | T114 |
 | SC-006 | 100% booking/ARRIVED/consent/outcome/reschedule/quick action keep scope, state, idempotency | `tests/integration/booking-calendar.integration.test.ts`, `tests/integration/booking-outcome.integration.test.ts`, `tests/integration/booking-arrived-proof-flow.integration.test.ts`, `tests/integration/quick-actions.integration.test.ts`, `tests/unit/mutation-boundary.test.ts` | Boundary case set in those suites | PASS | — |
 | SC-007 | 100% notification deep links correct; duplicates do not inflate badges | `tests/unit/notification-reconciliation.test.ts`, `tests/unit/badge-store-ui.test.ts`, `tests/integration/notification-privacy.integration.test.ts` | Sample set in those suites | PASS | — |
-| SC-008 | 100% critical screens meet touch target, label/role/focus, safe area | `tests/accessibility/critical-path-matrix.a11y.test.tsx`, `tests/accessibility/theme-layout.a11y.test.tsx`, `tests/accessibility/screen-primitives.a11y.test.tsx` | Critical screen matrix in those suites | PASS under Jest; real phone/tablet not yet exercised | T111 |
+| SC-008 | 100% critical screens meet touch target, label/role/focus, safe area | `tests/accessibility/critical-path-matrix.a11y.test.tsx`, `tests/accessibility/theme-layout.a11y.test.tsx`, `tests/accessibility/screen-primitives.a11y.test.tsx` | Critical screen matrix in those suites | PASS under Jest and on device — `tests/e2e/accessibility-smoke.e2e.ts` runs the accessibility launch profile on both the phone and the 1280x800 tablet emulator. iOS layouts not exercised | T135 |
 | SC-009 | ≥95% recovery in recoverable critical paths | `tests/integration/recovery-rate.integration.test.ts` | 20 injected failure scenarios minimum | PASS — 20/20 | — |
-| SC-010 | Mobile build + E2E smoke against the real Module 1-4 API, no mock-only critical path | `tests/contract/module-compatibility.contract.test.ts`, `tests/e2e/mvp-critical-path.e2e.ts` | Full critical-path journey | BLOCKED — contract leg passes, native E2E leg not executed | T107, T135 |
+| SC-010 | Mobile build + E2E smoke against the real Module 1-4 API, no mock-only critical path | `tests/contract/module-compatibility.contract.test.ts`, `tests/e2e/mvp-critical-path.e2e.ts` | Full critical-path journey | PASS on Android — contract leg passes and `mvp-critical-path.e2e.ts` ran against the real seeded API on the phone and tablet release builds. iOS not executed on this host | T135 |
 
 ## Notes
 
@@ -81,3 +81,13 @@ Paths are relative to `apps/mobile/`. Status values:
   Every other mapping in this document is by inspection and will drift if suites are renamed.
 - Two rows are **REVIEW**, not PASS: FR-026 (negative scope, nothing to assert) and CR-005 (latency
   telemetry has no dedicated assertion). Neither is blocked on hardware.
+- Device results as of 2026-08-10 come from the `releaseE2e` build (embedded JS bundle), APK SHA-256
+  `73c97db23de11d368abd7c34892bac6bb520b47e40b1bd56db5629f2309d30c6`, on `Detox_A34` (phone) and
+  `Detox_Tablet_A34` (tablet, 1280x800). A debug APK ships no bundle and fetches from Metro, so it
+  cannot substitute for these rows. Full numbers are in `verification.md`.
+- One row is neither PASS nor FAIL: SC-003. Its harness measures Detox's launch orchestration
+  alongside the app, and that overhead alone exceeds the criterion's budget, so no verdict the
+  harness produces means anything yet. Corrected in `verification.md` on 2026-08-11; the earlier
+  entry there calling it a genuine product miss was wrong.
+- No iOS row in this document is claimed from a device. This host has no macOS or Xcode, so every
+  `ios.*` Detox profile is unexecuted.

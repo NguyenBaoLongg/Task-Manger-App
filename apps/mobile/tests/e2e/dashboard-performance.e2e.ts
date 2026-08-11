@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { device } from 'detox';
 import jestExpect from 'expect';
-import { emitDetoxMetric, signInToDashboard, tapId, waitForId } from './helpers';
+import { emitDetoxMetric, readDetoxEnv, signInToDashboard, tapId, waitForId } from './helpers';
 
 const RUN_COUNT = 20;
 const PASS_THRESHOLD = 19;
@@ -17,7 +17,22 @@ type PerformanceSample = {
   run: number;
 };
 
-const profiles: DashboardProfile[] = ['COLD_START', 'WARM_CACHE', 'DEGRADED_NETWORK'];
+const allProfiles: DashboardProfile[] = ['COLD_START', 'WARM_CACHE', 'DEGRADED_NETWORK'];
+
+/**
+ * Running all three profiles in one test means 60 samples and roughly 90 minutes of sustained
+ * emulator load, during which Detox has been observed to lose its connection to the app and the
+ * host to become unusable. `ADSUP_SC003_PROFILES` runs a subset so each invocation stays short and
+ * the machine recovers between them. Unset, the full sweep runs and the criterion is judged whole.
+ */
+const requestedProfiles = readDetoxEnv('ADSUP_SC003_PROFILES')
+  .split(',')
+  .map((name: string) => name.trim().toUpperCase())
+  .filter((name: string): name is DashboardProfile =>
+    (allProfiles as string[]).includes(name),
+  );
+
+const profiles: DashboardProfile[] = requestedProfiles.length ? requestedProfiles : allProfiles;
 
 const adbPath = process.env.ANDROID_HOME ? `${process.env.ANDROID_HOME}/platform-tools/adb` : 'adb';
 
@@ -111,16 +126,19 @@ describe('SC-003 dashboard performance', () => {
 
     restoreEmulatorNetwork();
 
-    const byProfile = profiles.reduce<Record<DashboardProfile, number>>(
+    // Only profiles that actually ran are reported. A zero for a profile that was never executed
+    // would be indistinguishable from a profile that failed every sample.
+    const byProfile = profiles.reduce<Partial<Record<DashboardProfile, number>>>(
       (accumulator, profile) => ({
         ...accumulator,
         [profile]: samples.filter((sample) => sample.profile === profile && sample.passed).length,
       }),
-      { COLD_START: 0, DEGRADED_NETWORK: 0, WARM_CACHE: 0 },
+      {},
     );
 
     emitDetoxMetric('SC003_DASHBOARD_PERFORMANCE', {
       denominatorPerProfile: RUN_COUNT,
+      executedProfiles: profiles,
       limitMs: LIMIT_MS,
       networkProfile: { DEGRADED_NETWORK: 'emulator speed=edge delay=edge', other: 'full/none' },
       passThreshold: PASS_THRESHOLD,
@@ -131,7 +149,7 @@ describe('SC-003 dashboard performance', () => {
     // Detox replaces the global `expect` with its own matcher API, which rejects a plain number.
     // Jest's `expect` is imported directly so the per-profile verdict is actually asserted.
     for (const profile of profiles) {
-      jestExpect(byProfile[profile]).toBeGreaterThanOrEqual(PASS_THRESHOLD);
+      jestExpect(byProfile[profile] ?? 0).toBeGreaterThanOrEqual(PASS_THRESHOLD);
     }
   });
 });
