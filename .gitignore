@@ -22,3 +22,8 @@ packages/database/prisma/dev.db
 # which is the tracked source of truth; committing both would let them drift apart.
 .claude/skills/
 .claude/settings.local.json
+
+# Local tooling & scratch artifacts
+.tools/specify-venv/
+/screen*.png
+apps/mobile/android/.kotlin/
