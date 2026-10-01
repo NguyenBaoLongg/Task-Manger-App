@@ -104,4 +104,27 @@ describe('restoreWorkspaceContext', () => {
       context: { membershipId: 'member-1', permissions: [] },
     });
   });
+
+  it('carries fresh permission codes into the restored context', async () => {
+    const outcome = await restoreWorkspaceContext(
+      build({ listPermissions: async () => ['chat.manage', 'chat.read'] }),
+    );
+
+    expect(outcome).toMatchObject({
+      route: 'dashboard',
+      context: { permissions: ['chat.manage', 'chat.read'] },
+    });
+  });
+
+  it('keeps the dashboard usable when the permission lookup fails', async () => {
+    const outcome = await restoreWorkspaceContext(
+      build({
+        listPermissions: async () => {
+          throw new Error('offline');
+        },
+      }),
+    );
+
+    expect(outcome).toMatchObject({ route: 'dashboard', context: { permissions: [] } });
+  });
 });

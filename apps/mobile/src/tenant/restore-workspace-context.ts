@@ -24,6 +24,8 @@ export type RestoreInput = {
   listMemberships: () => Promise<Membership[]>;
   /** Branches the backend currently allows for that membership. */
   listBranches: (tenantId: string) => Promise<Branch[]>;
+  /** Permission codes for the membership, read fresh so restored screens can gate actions. */
+  listPermissions?: (tenantId: string) => Promise<string[]>;
 };
 
 /**
@@ -58,13 +60,17 @@ export const restoreWorkspaceContext = async (input: RestoreInput): Promise<Rest
     };
   }
 
+  const permissions = input.listPermissions
+    ? await input.listPermissions(membership.tenantId).catch(() => [])
+    : [];
+
   return {
     route: 'dashboard',
     context: {
       tenantId: membership.tenantId,
       membershipId: membership.membershipId,
       branchId: branch.id,
-      permissions: [],
+      permissions,
       version: 1,
     },
   };

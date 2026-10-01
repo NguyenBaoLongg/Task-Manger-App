@@ -21,10 +21,36 @@ export const sendMessage = (
   client: ApiClient,
   tenantId: string,
   channelId: string,
-  input: { clientMessageId: string; body: string; idempotencyKey: string },
+  input: { clientMessageId: string; body: string; mediaId?: string; idempotencyKey: string },
 ) =>
   client.tenant(tenantId).request(`/channels/${encodeURIComponent(channelId)}/messages`, {
     method: 'POST',
-    body: { clientMessageId: input.clientMessageId, body: input.body },
+    body: {
+      clientMessageId: input.clientMessageId,
+      body: input.body,
+      ...(input.mediaId ? { mediaId: input.mediaId } : {}),
+    },
     idempotencyKey: input.idempotencyKey,
+  });
+
+export type ChannelMember = { membershipId: string; displayName: string; role: string };
+
+export const listChannelMembers = (client: ApiClient, tenantId: string, channelId: string) =>
+  client
+    .tenant(tenantId)
+    .request<ChannelMember[]>(`/channels/${encodeURIComponent(channelId)}/members`);
+
+/**
+ * Opens the 1-1 conversation with one other member. The backend returns the existing DIRECT
+ * channel when the pair already has one, so repeated taps never fork the history.
+ */
+export const startDirectMessage = (
+  client: ApiClient,
+  tenantId: string,
+  otherMembershipId: string,
+) =>
+  client.tenant(tenantId).request<{ id: string }>('/channels', {
+    method: 'POST',
+    body: { type: 'DIRECT', membershipIds: [otherMembershipId] },
+    idempotencyKey: `dm-${otherMembershipId.slice(0, 12)}`,
   });

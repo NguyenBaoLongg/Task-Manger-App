@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { getAuthenticatedClient, getStoredSession } from '@/features/auth/session-runtime';
-import { selectBranch, selectWorkspace } from '@/features/workspace/workspace-queries';
+import { selectBranch, selectWorkspace, myPermissions } from '@/features/workspace/workspace-queries';
 import { restoreWorkspaceContext, type RestoreOutcome } from '@/tenant/restore-workspace-context';
 import { createWorkspaceSelectionStorage } from '@/tenant/workspace-selection-storage';
 import { useTenantContextStore } from '@/tenant/tenant-context-store';
@@ -38,6 +38,7 @@ export default function Index() {
         selection,
         listMemberships: () => selectWorkspace(client),
         listBranches: (tenantId) => selectBranch(client, tenantId),
+        listPermissions: (tenantId) => myPermissions(client, tenantId),
       });
     };
 

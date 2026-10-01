@@ -11,6 +11,7 @@ export type Conversation = {
   lastMessage?: {
     id: string;
     body: string;
+    messageType?: string;
     authorMembershipId: string;
     authorDisplayName: string;
     createdAt: string;
@@ -82,6 +83,18 @@ export const timeLabelFor = (iso: string | undefined, now: Date): string => {
 };
 
 /**
+ * Media messages show what they are rather than their (often empty) body; a caption, when the
+ * sender typed one, follows the glyph.
+ */
+export const mediaPreviewFor = (messageType: string | undefined, body: string): string => {
+  if (messageType === 'IMAGE') return body ? `📷 ${body}` : '📷 Ảnh';
+  if (messageType === 'VIDEO') return body ? `🎬 ${body}` : '🎬 Video';
+  if (messageType === 'AUDIO') return '🎤 Tin nhắn thoại';
+  if (messageType === 'FILE') return body ? `📎 ${body}` : '📎 File';
+  return body;
+};
+
+/**
  * The preview line. A group prefixes the author so the reader knows who spoke without opening it;
  * the viewer's own message is prefixed "Bạn" the way every chat client does.
  */
@@ -89,9 +102,11 @@ const previewFor = (conversation: Conversation, viewerMembershipId?: string): st
   const last = conversation.lastMessage;
   if (!last) return 'Chưa có tin nhắn';
 
-  const body = last.body.replace(/\s+/g, ' ').trim();
+  const body = mediaPreviewFor(last.messageType, last.body.replace(/\s+/g, ' ').trim());
   const isOwn = Boolean(viewerMembershipId) && last.authorMembershipId === viewerMembershipId;
   if (isOwn) return `Bạn: ${body}`;
+  // In a DM the row already carries the peer's name; the prefix would repeat it.
+  if (conversation.type === 'DIRECT') return body;
   return `${last.authorDisplayName}: ${body}`;
 };
 

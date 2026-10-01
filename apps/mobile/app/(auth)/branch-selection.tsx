@@ -5,7 +5,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { AppButton, ScreenFrame, StatusPill } from '@/components/ui/ScreenPrimitives';
 import { tokens } from '@/theme/tokens';
 import { getAuthenticatedClient } from '@/features/auth/session-runtime';
-import { selectBranch, type Branch } from '@/features/workspace/workspace-queries';
+import { myPermissions, selectBranch, type Branch } from '@/features/workspace/workspace-queries';
 import { createBranchScope } from '@/features/workspace/branch-scope';
 import { useTenantContextStore } from '@/tenant/tenant-context-store';
 import { createWorkspaceSelectionStorage } from '@/tenant/workspace-selection-storage';
@@ -20,6 +20,7 @@ export default function BranchSelectionScreen() {
   }>();
   const setContext = useTenantContextStore((state) => state.setContext);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -28,10 +29,18 @@ export default function BranchSelectionScreen() {
       if (!tenantId) return undefined;
       let active = true;
       void getAuthenticatedClient()
-        .then((client) => selectBranch(client, tenantId))
-        .then((items) => {
+        .then((client) =>
+          Promise.all([
+            selectBranch(client, tenantId),
+            // The chosen scope carries the caller's permission codes; screens like the chat tab
+            // gate actions on them, so an empty list would hide legitimate capabilities.
+            myPermissions(client, tenantId).catch(() => []),
+          ]),
+        )
+        .then(([items, codes]) => {
           if (active) {
             setBranches(items);
+            setPermissions(codes);
             setError(false);
           }
         })
@@ -89,7 +98,7 @@ export default function BranchSelectionScreen() {
                     {
                       tenantId,
                       membershipId: membershipId ?? 'current-membership',
-                      permissions: [],
+                      permissions,
                       version: 1,
                     },
                     branch.id,

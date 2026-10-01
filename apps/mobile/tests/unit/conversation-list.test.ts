@@ -164,3 +164,91 @@ describe('matchesQuery', () => {
     expect(matchesQuery(row, 'booking')).toBe(false);
   });
 });
+
+describe('direct messages', () => {
+  it('drops the group prefix and repeats no author name in a DM preview', () => {
+    const row = toConversationRow(
+      conversation({
+        type: 'DIRECT',
+        name: 'A Giang',
+        lastMessage: {
+          id: 'message-2',
+          body: 'Cho mình hỏi ca chiều nhé',
+          authorMembershipId: 'member-other',
+          authorDisplayName: 'A Giang',
+          createdAt: '2026-08-12T10:00:00',
+        },
+      }),
+      { viewerMembershipId: 'member-me', now: NOW },
+    );
+    expect(row.isGroup).toBe(false);
+    expect(row.name).toBe('A Giang');
+    expect(row.preview).toBe('Cho mình hỏi ca chiều nhé');
+  });
+
+  it('still marks the viewer as the author of their own DM', () => {
+    const row = toConversationRow(
+      conversation({
+        type: 'DIRECT',
+        name: 'A Giang',
+        lastMessage: {
+          id: 'message-3',
+          body: 'Đã nhận',
+          authorMembershipId: 'member-me',
+          authorDisplayName: 'Tôi',
+          createdAt: '2026-08-12T10:05:00',
+        },
+      }),
+      { viewerMembershipId: 'member-me', now: NOW },
+    );
+    expect(row.preview).toBe('Bạn: Đã nhận');
+  });
+});
+
+describe('media previews', () => {
+  const lastOf = (messageType: string, body: string) => ({
+    id: 'message-4',
+    body,
+    messageType,
+    authorMembershipId: 'member-other',
+    authorDisplayName: 'A Giang',
+    createdAt: '2026-08-12T11:00:00',
+  });
+
+  it('labels image, video, voice and file messages instead of showing an empty body', () => {
+    expect(toConversationRow(conversation({ lastMessage: lastOf('IMAGE', '') }), { now: NOW }).preview).toBe(
+      'A Giang: 📷 Ảnh',
+    );
+    expect(toConversationRow(conversation({ lastMessage: lastOf('VIDEO', '') }), { now: NOW }).preview).toBe(
+      'A Giang: 🎬 Video',
+    );
+    expect(
+      toConversationRow(conversation({ lastMessage: lastOf('AUDIO', '') }), { now: NOW }).preview,
+    ).toBe('A Giang: 🎤 Tin nhắn thoại');
+    expect(toConversationRow(conversation({ lastMessage: lastOf('FILE', '') }), { now: NOW }).preview).toBe(
+      'A Giang: 📎 File',
+    );
+  });
+
+  it('keeps the viewer prefix and a caption when one was typed', () => {
+    expect(
+      toConversationRow(
+        conversation({
+          lastMessage: { ...lastOf('IMAGE', 'Báo cáo hôm nay'), authorMembershipId: 'member-me' },
+        }),
+        {
+          viewerMembershipId: 'member-me',
+          now: NOW,
+        },
+      ).preview,
+    ).toBe('Bạn: 📷 Báo cáo hôm nay');
+  });
+
+  it('leaves text messages untouched', () => {
+    expect(
+      toConversationRow(conversation({ lastMessage: lastOf('TEXT', 'Chào buổi sáng') }), {
+        now: NOW,
+      }).preview,
+    ).toBe('A Giang: Chào buổi sáng');
+  });
+});

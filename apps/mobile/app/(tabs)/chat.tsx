@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { getRuntimeConfig } from '@/config/runtime-config';
 import { getAuthenticatedClient, getSessionAccessToken } from '@/features/auth/session-runtime';
 import { listChannels } from '@/features/chat/chat-queries';
@@ -106,9 +106,13 @@ export default function ChatScreen() {
     }
   }, [context]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // Fires on mount and again whenever the tab regains focus (e.g. returning from create-group),
+  // so a new conversation shows up without waiting for a socket event.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   // A conversation list is only correct while it keeps up. Any incoming message reorders the list
   // and moves an unread count, so the socket refreshes it rather than the user pulling to refresh.
@@ -141,23 +145,34 @@ export default function ChatScreen() {
         <Text accessibilityRole="header" style={styles.headerTitle}>
           Trò chuyện
         </Text>
-        {totalUnread > 0 ? (
-          <View
-            testID="chat.badge-strip"
-            accessibilityLabel={`${totalUnread} tin nhắn chưa đọc`}
-            style={styles.headerBadge}
+        <View style={styles.headerActions}>
+          <Pressable
+            testID="chat.create-group"
+            accessibilityRole="button"
+            accessibilityLabel="Tạo nhóm chat"
+            onPress={() => router.push('/chat/create-group')}
+            style={({ pressed }) => [styles.createButton, pressed && styles.createButtonPressed]}
           >
-            <Text style={styles.headerBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
-          </View>
-        ) : (
-          <View
-            testID="chat.badge-strip"
-            accessibilityLabel="Không có tin nhắn chưa đọc"
-            style={styles.headerBadgeEmpty}
-          >
-            <Text style={styles.headerBadgeEmptyText}>Đã đọc hết</Text>
-          </View>
-        )}
+            <Text style={styles.createButtonText}>+ Nhóm</Text>
+          </Pressable>
+          {totalUnread > 0 ? (
+            <View
+              testID="chat.badge-strip"
+              accessibilityLabel={`${totalUnread} tin nhắn chưa đọc`}
+              style={styles.headerBadge}
+            >
+              <Text style={styles.headerBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
+            </View>
+          ) : (
+            <View
+              testID="chat.badge-strip"
+              accessibilityLabel="Không có tin nhắn chưa đọc"
+              style={styles.headerBadgeEmpty}
+            >
+              <Text style={styles.headerBadgeEmptyText}>Đã đọc hết</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <View style={styles.searchWrap}>
@@ -246,6 +261,21 @@ const styles = StyleSheet.create({
     color: tokens.color.success,
     fontSize: tokens.typography.label,
     fontWeight: '700',
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm },
+  createButton: {
+    height: 28,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    backgroundColor: tokens.color.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createButtonPressed: { opacity: 0.82 },
+  createButtonText: {
+    color: tokens.color.primary,
+    fontSize: tokens.typography.label,
+    fontWeight: '800',
   },
   searchWrap: { paddingHorizontal: tokens.spacing.lg, paddingBottom: tokens.spacing.md },
   search: {
