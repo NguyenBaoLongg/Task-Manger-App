@@ -98,6 +98,19 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+        // Empty in shipping/debug builds. Only releaseE2e overrides this with the emulator's host
+        // alias so SC-003 traverses the virtual radio instead of an adb reverse tunnel.
+        buildConfigField "String", "ADSUP_TEST_API_BASE_URL", "\"\""
+        // Startup-metric emission is a releaseE2e-only affordance. Detox does not deliver flat
+        // intent extras on relaunch, so the Kotlin gate cannot rely on launch arguments.
+        buildConfigField "boolean", "ADSUP_SC003_METRICS_ENABLED", "false"
+        // Test-double Google subject for releaseE2e builds (join-flow E2E signs in as a second
+        // account). Ordinary debug/shipping builds keep the default owner subject.
+        buildConfigField "String", "ADSUP_E2E_GOOGLE_SUBJECT", "\"${findProperty('adsupE2eGoogleSubject') ?: 'local-mobile-user'}\""
+        // Opt-in real Google OAuth on a releaseE2e build (keeps its cleartext/loopback network
+        // config for on-device testing against a local API). Off by default so E2E keeps the
+        // test double.
+        buildConfigField "boolean", "ADSUP_GOOGLE_FORCE_REAL", "false"
     }
     signingConfigs {
         debug {
@@ -125,12 +138,16 @@ android {
         // Release fidelity for end-to-end measurement: the JS bundle is embedded in the APK exactly
         // as it is for `release`, so SC-001 and SC-003 are measured without a Metro round trip.
         // The only difference is a network security config permitting cleartext to the loopback
-        // aliases an emulator uses to reach the developer's API. The shipping `release` variant is
-        // left untouched, so no test affordance is published.
+        // aliases an emulator uses to reach the developer's API, plus a test-only API URL override
+        // (adsupTestApiBaseUrl) so physical devices can use `adb reverse`. The shipping `release`
+        // variant is left untouched, so no test affordance is published.
         releaseE2e {
             initWith release
             matchingFallbacks = ['release']
             signingConfig signingConfigs.debug
+            buildConfigField "String", "ADSUP_TEST_API_BASE_URL", "\"${findProperty('adsupTestApiBaseUrl') ?: 'http://10.0.2.2:3000'}\""
+            buildConfigField "boolean", "ADSUP_SC003_METRICS_ENABLED", "true"
+            buildConfigField "boolean", "ADSUP_GOOGLE_FORCE_REAL", "${findProperty('adsupForceRealGoogle') ?: 'false'}"
         }
     }
     // `assembleAndroidTest` follows this build type. It stays on debug unless a build asks for the

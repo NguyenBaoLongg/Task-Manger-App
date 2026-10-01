@@ -1,5 +1,6 @@
 import { expect } from 'detox';
-import { signInToDashboard, tapId, waitForId } from './helpers';
+import { by, element } from 'detox';
+import { signInToDashboard, tapId, waitForId, VISIBILITY_TIMEOUT_MS } from './helpers';
 
 /**
  * `signInToDashboard` selects the first branch, so switching must select a different one.
@@ -20,7 +21,9 @@ describe('auth and workspace smoke', () => {
 
     await tapId('tab.workspace');
     await tapId('workspace.logout');
-    await expect(await waitForId('auth.sign-in')).toBeVisible();
+    await expect(element(by.text('Đăng xuất'))).toBeVisible();
+    await element(by.text('Đăng xuất')).tap();
+    await expect(await waitForId('auth.sign-in', { timeout: VISIBILITY_TIMEOUT_MS })).toBeVisible();
 
     await tapId('auth.sign-in');
     await expect(await waitForId('workspace.option')).toBeVisible();

@@ -6,6 +6,8 @@ const accessibilityLaunchArgs = {
 };
 const androidPhoneAvdName = process.env.DETOX_ANDROID_PHONE_AVD || 'Pixel_6_API_34';
 const androidTabletAvdName = process.env.DETOX_ANDROID_TABLET_AVD || 'Pixel_Tablet_API_34';
+// Optional serial of a USB-connected device; unset matches the first free device in `adb devices`.
+const androidPhoneAdbName = process.env.DETOX_ANDROID_PHONE_ADB_NAME;
 const androidBuildCommand =
   process.platform === 'win32'
     ? 'cd android && gradlew.bat assembleDebug assembleAndroidTest -DtestBuildType=debug'
@@ -15,7 +17,8 @@ const androidBuildCommand =
  * Release-fidelity build. `releaseE2e` inherits `release`, so the JS bundle is embedded in the APK
  * and no Metro round trip happens at launch — which is the only way SC-001 and SC-003 measure the
  * configuration users actually receive. `adsupTestBuildType` moves `assembleAndroidTest` onto the
- * same variant so the instrumentation APK matches the app under test.
+ * same variant so the instrumentation APK matches the app under test. The variant's native
+ * BuildConfig also overrides the API URL with `10.0.2.2`, keeping SC-003 on emulator NAT.
  */
 const androidReleaseBuildCommand =
   process.platform === 'win32'
@@ -46,8 +49,13 @@ module.exports = {
     },
     'android.release': {
       type: 'android.apk',
-      binaryPath: 'android/app/build/outputs/apk/releaseE2e/app-releaseE2e.apk',
+      // Detox splits the install command on whitespace before shelling out, so a binary path
+      // containing spaces (like this checkout's directory name) makes `adb install` stat a
+      // truncated path. The overrides let a run use APKs copied to a space-free location.
+      binaryPath:
+        process.env.ADSUP_E2E_APK_PATH || 'android/app/build/outputs/apk/releaseE2e/app-releaseE2e.apk',
       testBinaryPath:
+        process.env.ADSUP_E2E_TEST_APK_PATH ||
         'android/app/build/outputs/apk/androidTest/releaseE2e/app-releaseE2e-androidTest.apk',
       build: androidReleaseBuildCommand,
     },
@@ -68,6 +76,10 @@ module.exports = {
     tabletEmulator: {
       type: 'android.emulator',
       device: { avdName: androidTabletAvdName },
+    },
+    physicalPhone: {
+      type: 'android.attached',
+      device: { adbName: androidPhoneAdbName },
     },
   },
   configurations: {
@@ -113,6 +125,14 @@ module.exports = {
     // fetch on every launch, which is not what a user experiences.
     'android.phone.release': {
       device: 'emulator',
+      app: 'android.release',
+      launchArgs: lightLaunchArgs,
+    },
+    // Same release-fidelity app on a USB-connected physical device. Set
+    // ORG_GRADLE_PROJECT_adsupTestApiBaseUrl=http://localhost:3000 before the run and keep
+    // `adb reverse tcp:3000 tcp:3000` active so the device reaches the developer's API.
+    'android.phone.release.attached': {
+      device: 'physicalPhone',
       app: 'android.release',
       launchArgs: lightLaunchArgs,
     },
