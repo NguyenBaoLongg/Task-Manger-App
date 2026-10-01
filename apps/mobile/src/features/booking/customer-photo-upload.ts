@@ -1,5 +1,5 @@
 import type { createApiClient } from '@/api/api-client';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { createCustomerPhotoUploadIntent } from './customer-photo-consent';
 import { completeUpload } from '@/media/media-upload-transport';
 type ApiClient = ReturnType<typeof createApiClient>;
@@ -26,5 +26,7 @@ export const createCustomerPhotoUploadFlow = (
   complete: (mediaId: string, checksumSha256: string, idempotencyKey: string) =>
     completeCustomerPhotoUpload(client, tenantId, mediaId, checksumSha256, idempotencyKey),
 });
-export const cleanupCustomerPhoto = (uri: string) =>
-  FileSystem.deleteAsync(uri, { idempotent: true });
+export const cleanupCustomerPhoto = (uri: string) => {
+  const file = new File(uri);
+  if (file.exists) file.delete();
+};

@@ -1,5 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { tokens } from '@/theme/tokens';
 import { useAppTheme } from '@/theme/theme-provider';
@@ -14,6 +15,8 @@ type ScreenFrameProps = {
 
 export const ScreenFrame = ({ eyebrow, title, subtitle, testID, children }: ScreenFrameProps) => {
   const theme = useAppTheme();
+  const router = useRouter();
+  const canGoBack = router.canGoBack();
   return (
     <SafeAreaView
       testID={testID}
@@ -21,16 +24,29 @@ export const ScreenFrame = ({ eyebrow, title, subtitle, testID, children }: Scre
       edges={['top', 'left', 'right']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          {eyebrow ? (
-            <Text style={[styles.eyebrow, { color: theme.color.primary }]}>{eyebrow}</Text>
+        <View style={styles.headerRow}>
+          {canGoBack ? (
+            <Pressable
+              testID="screen.back"
+              accessibilityRole="button"
+              accessibilityLabel="Quay lại"
+              onPress={() => router.back()}
+              style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
+            >
+              <Text style={[styles.backGlyph, { color: theme.color.ink }]}>‹</Text>
+            </Pressable>
           ) : null}
-          <Text accessibilityRole="header" style={[styles.title, { color: theme.color.ink }]}>
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text style={[styles.subtitle, { color: theme.color.muted }]}>{subtitle}</Text>
-          ) : null}
+          <View style={styles.header}>
+            {eyebrow ? (
+              <Text style={[styles.eyebrow, { color: theme.color.primary }]}>{eyebrow}</Text>
+            ) : null}
+            <Text accessibilityRole="header" style={[styles.title, { color: theme.color.ink }]}>
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text style={[styles.subtitle, { color: theme.color.muted }]}>{subtitle}</Text>
+            ) : null}
+          </View>
         </View>
         {children}
       </ScrollView>
@@ -145,7 +161,17 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: tokens.spacing.xl,
   },
-  header: { gap: tokens.spacing.xs },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.spacing.sm },
+  header: { flex: 1, gap: tokens.spacing.xs },
+  backButton: {
+    width: tokens.touchTarget,
+    height: tokens.touchTarget,
+    marginLeft: -10,
+    borderRadius: tokens.radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backGlyph: { fontSize: 32, lineHeight: 34, fontWeight: '700' },
   eyebrow: { color: tokens.color.primary, fontSize: tokens.typography.label, fontWeight: '800' },
   title: { color: tokens.color.ink, fontSize: 28, lineHeight: 34, fontWeight: '800' },
   subtitle: { color: tokens.color.muted, fontSize: tokens.typography.body, lineHeight: 23 },

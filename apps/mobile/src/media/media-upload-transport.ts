@@ -1,15 +1,33 @@
 import type { createApiClient } from '@/api/api-client';
 type ApiClient = ReturnType<typeof createApiClient>;
+
+export type UploadIntentResult = {
+  media?: { id?: string };
+  upload?: { url?: string; requiredHeaders?: Record<string, string>; expiresAt?: string };
+};
+
 export const createUploadIntent = (
   client: ApiClient,
   tenantId: string,
-  input: { purpose: string; checksum: string; sizeBytes: number; idempotencyKey: string },
+  input: {
+    purpose: string;
+    contentType: string;
+    byteSize: number;
+    checksumSha256: string;
+    idempotencyKey: string;
+  },
 ) =>
-  client.tenant(tenantId).request('/media/upload-intents', {
+  client.tenant(tenantId).request<UploadIntentResult>('/media/upload-intents', {
     method: 'POST',
-    body: input,
+    body: {
+      purpose: input.purpose,
+      contentType: input.contentType,
+      byteSize: input.byteSize,
+      checksumSha256: input.checksumSha256,
+    },
     idempotencyKey: input.idempotencyKey,
   });
+
 export const completeUpload = (
   client: ApiClient,
   tenantId: string,

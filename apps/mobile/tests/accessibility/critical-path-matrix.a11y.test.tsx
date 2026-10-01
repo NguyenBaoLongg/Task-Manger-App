@@ -2,7 +2,14 @@ import { render } from '@testing-library/react-native';
 import DashboardScreen from '@/../app/(tabs)/dashboard';
 import SignInScreen from '@/../app/(auth)/sign-in';
 
-jest.mock('expo-router', () => ({ router: { replace: jest.fn(), push: jest.fn() } }));
+jest.mock('expo-router', () => {
+  const router = { replace: jest.fn(), push: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => false) };
+  return {
+    router,
+    useRouter: () => router,
+    useFocusEffect: jest.fn(),
+  };
+});
 
 describe('critical path accessibility matrix', () => {
   it('keeps headings, labelled regions and touch targets available', () => {
