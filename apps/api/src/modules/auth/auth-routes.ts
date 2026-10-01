@@ -37,9 +37,12 @@ export function authRoutes(
   });
   router.post('/auth/refresh', async (request: AuthenticatedRequest, response) => {
     const body = refreshBody.parse(request.body);
+    const header = request.header('idempotency-key');
+    const idempotencyKey =
+      header === undefined ? undefined : z.string().min(8).max(128).parse(header);
     response
       .status(200)
-      .json(await tokens.refresh(body.refreshToken, readIdempotencyKey(request), governance));
+      .json(await tokens.refresh(body.refreshToken, idempotencyKey, governance));
   });
   router.post(
     '/auth/logout',
