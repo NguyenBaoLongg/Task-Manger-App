@@ -85,6 +85,13 @@ live('booking photo-debt media-ready consumer', () => {
       },
       data: { status: 'SENT', sentAt: new Date() },
     });
+    // claimOutbox is global (not tenant-scoped) and the dev database is shared, so scope every
+    // claim to a synthetic epoch: only backdated fixture rows are claimable.
+    const claimAt = new Date('2000-01-02T00:00:00.000Z');
+    await database.outboxEvent.updateMany({
+      where: { tenantId: fixture.tenantId, eventType: 'media.ready.v1' },
+      data: { availableAt: new Date('2000-01-01T00:00:00.000Z') },
+    });
     const runner = new PhotoDebtRunner(new BookingWorkerRepository(database));
     let attempt = 0;
     const consumer = {
@@ -101,7 +108,8 @@ live('booking photo-debt media-ready consumer', () => {
       10,
       consumer,
     );
-    await expect(dispatcher.dispatch('booking-photo-worker')).resolves.toMatchObject({
+    await expect(dispatcher.dispatch('booking-photo-worker', claimAt)).resolves.toMatchObject({
+      claimed: 1,
       sent: 0,
       failed: 1,
     });
@@ -109,7 +117,8 @@ live('booking photo-debt media-ready consumer', () => {
       where: { tenantId: fixture.tenantId, eventType: 'media.ready.v1' },
       data: { availableAt: new Date('2000-01-01T00:00:00.000Z') },
     });
-    await expect(dispatcher.dispatch('booking-photo-worker')).resolves.toMatchObject({
+    await expect(dispatcher.dispatch('booking-photo-worker', claimAt)).resolves.toMatchObject({
+      claimed: 1,
       sent: 1,
       failed: 0,
     });
@@ -143,13 +152,17 @@ live('booking photo-debt media-ready consumer', () => {
         where: { tenantId: fixture.tenantId, itemType: 'PHOTO_DEBT' },
       }),
     ).toMatchObject({ state: 'COMPLETED' });
-    await expect(dispatcher.dispatch('booking-photo-worker')).resolves.toMatchObject({
+    await database.outboxEvent.updateMany({
+      where: { tenantId: fixture.tenantId, status: 'PENDING' },
+      data: { availableAt: new Date('2000-01-01T00:00:00.000Z') },
+    });
+    await expect(dispatcher.dispatch('booking-photo-worker', claimAt)).resolves.toMatchObject({
       claimed: 2,
       sent: 2,
       failed: 0,
     });
     expect(attempt).toBe(2);
-    await expect(dispatcher.dispatch('booking-photo-worker')).resolves.toMatchObject({
+    await expect(dispatcher.dispatch('booking-photo-worker', claimAt)).resolves.toMatchObject({
       claimed: 0,
     });
   });
