@@ -15,8 +15,16 @@ describe('chat and notification smoke', () => {
     await tapId('chat.conversation-list.first');
     await waitForId('chat.conversation');
     await expect(await waitForId('chat.message-list')).toBeVisible();
-    await element(by.id('chat.composer')).replaceText('Detox seeded message');
+    // Seed messages persist in the live database between runs, so the body must be unique per
+    // run or `by.text` matches earlier seeds too.
+    const seededBody = `Detox seeded ${Date.now()}`;
+    await element(by.id('chat.composer')).replaceText(seededBody);
     await expect(await waitForId('chat.send')).toBeVisible();
+
+    // Sending must render the message in the thread immediately; a client that fails to join the
+    // channel room never receives `message:created` and would show nothing after this tap.
+    await tapId('chat.send');
+    await expect(element(by.text(seededBody))).toBeVisible();
 
     await tapId('chat.back');
     await waitForId('chat.screen');

@@ -95,12 +95,19 @@ export default function ConversationScreen() {
       context: createTenantContext(context),
     });
     socket.connect();
+    // The server publishes `message:created` to the channel room only; without joining it this
+    // socket would never receive it, so sent messages would never appear in the thread.
+    void socket.joinChannel(channelId);
     const stop = socket.on('message:created', (payload) => {
       const item = payload as ChatMessage & { channelId?: string };
       if (!item.id || (item.channelId && item.channelId !== channelId)) return;
       setMessages((current) => mergeMessages(current, [item]));
     });
-    return () => stop();
+    return () => {
+      stop();
+      socket.leaveChannel(channelId);
+      socket.disconnect();
+    };
   }, [context, channelId]);
 
   const loadOlder = useCallback(async () => {
@@ -122,11 +129,13 @@ export default function ConversationScreen() {
       const body = validateMessage(draft);
       const client = await getAuthenticatedClient();
       const stamp = Date.now();
-      await sendMessage(client, context.tenantId, channelId, {
+      const created = (await sendMessage(client, context.tenantId, channelId, {
         clientMessageId: `mobile-${stamp}`,
         body,
         idempotencyKey: `chat-${stamp}`,
-      });
+      })) as ChatMessage;
+      // The socket event may lag or drop; the sent message must show immediately.
+      setMessages((current) => mergeMessages(current, [created]));
       setDraft('');
       setError(undefined);
     } catch {
