@@ -31,3 +31,10 @@ export const selectWorkspace = async (client: ApiClient): Promise<WorkspaceMembe
 };
 export const selectBranch = (client: ApiClient, tenantId: string) =>
   client.tenant(tenantId).request<Branch[]>('/branches');
+
+export const myPermissions = async (client: ApiClient, tenantId: string): Promise<string[]> => {
+  const response = await client
+    .tenant(tenantId)
+    .request<{ codes?: string[] }>('/me/permissions');
+  return response.codes ?? [];
+};

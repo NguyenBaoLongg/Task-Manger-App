@@ -1,14 +1,19 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { validateProfileName } from '@/features/auth/profile-confirmation';
 import { confirmProfile } from '@/features/auth/profile-confirmation';
 import { getAuthenticatedClient } from '@/features/auth/session-runtime';
+import { completePendingJoin, JoinError } from '@/features/members/join-model';
 import { BrandLogo } from '@/components/brand/BrandLogo';
 import { AppButton, ScreenFrame, Surface } from '@/components/ui/ScreenPrimitives';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileConfirmationScreen() {
+  const { pendingJoinToken, pendingJoinKey } = useLocalSearchParams<{
+    pendingJoinToken?: string;
+    pendingJoinKey?: string;
+  }>();
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string>();
 
@@ -17,6 +22,18 @@ export default function ProfileConfirmationScreen() {
       const value = validateProfileName(fullName);
       const client = await getAuthenticatedClient();
       await confirmProfile(client, value, `profile-confirm-${Date.now()}`);
+      if (pendingJoinToken && pendingJoinKey) {
+        try {
+          await completePendingJoin(client, pendingJoinToken, pendingJoinKey);
+        } catch (caught) {
+          setError(
+            caught instanceof JoinError
+              ? caught.message
+              : 'Không thể hoàn tất tham gia. Hãy thử lại.',
+          );
+          return;
+        }
+      }
       router.replace('/(auth)/workspace-selection');
     } catch {
       setError('Vui lòng nhập họ và tên.');
@@ -54,6 +71,7 @@ export default function ProfileConfirmationScreen() {
           </Text>
         ) : null}
         <AppButton
+          testID="profile-confirm.submit"
           label="Xác nhận"
           onPress={() => void submit()}
           disabled={fullName.trim().length < 2}

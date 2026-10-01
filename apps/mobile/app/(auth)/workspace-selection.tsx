@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { ScreenFrame, StatusPill } from '@/components/ui/ScreenPrimitives';
+import { AppButton, ScreenFrame, StatusPill } from '@/components/ui/ScreenPrimitives';
 import { tokens } from '@/theme/tokens';
 import { getAuthenticatedClient } from '@/features/auth/session-runtime';
 import { selectWorkspace, type WorkspaceMembership } from '@/features/workspace/workspace-queries';
@@ -73,6 +73,24 @@ export default function WorkspaceSelectionScreen() {
           </Pressable>
         ))}
       </View>
+      {workspaces.length === 0 ? (
+        <View style={styles.joinBlock}>
+          <Text style={styles.joinHint}>
+            Bạn chưa thuộc công ty nào. Tạo công ty của riêng bạn hoặc nhập mã lời mời để tham gia.
+          </Text>
+          <AppButton
+            testID="workspace.create-company"
+            label="Tạo công ty"
+            onPress={() => router.push('/(auth)/create-company')}
+          />
+          <AppButton
+            testID="workspace.join-company"
+            label="Tham gia công ty"
+            variant="secondary"
+            onPress={() => router.push('/(auth)/join-company')}
+          />
+        </View>
+      ) : null}
     </ScreenFrame>
   );
 }
@@ -101,4 +119,11 @@ const styles = StyleSheet.create({
   },
   optionCopy: { flex: 1, alignItems: 'flex-start', gap: tokens.spacing.sm },
   optionTitle: { color: tokens.color.ink, fontSize: 18, fontWeight: '800' },
+  joinBlock: { gap: tokens.spacing.md, alignItems: 'stretch' },
+  joinHint: {
+    color: tokens.color.muted,
+    fontSize: tokens.typography.bodySmall,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
 });

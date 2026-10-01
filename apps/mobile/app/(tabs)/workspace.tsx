@@ -1,7 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { AppButton, ScreenFrame, SectionHeading, Surface } from '@/components/ui/ScreenPrimitives';
-import { clearSession } from '@/features/auth/session-runtime';
+import { clearSession, getAuthenticatedClient } from '@/features/auth/session-runtime';
+import { myPermissions } from '@/features/workspace/workspace-queries';
 import { useTenantContextStore } from '@/tenant/tenant-context-store';
 import { tokens } from '@/theme/tokens';
 
@@ -31,6 +33,28 @@ const actions = [
 export default function WorkspaceScreen() {
   const context = useTenantContextStore((state) => state.context);
   const clearContext = useTenantContextStore((state) => state.clear);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const canInvite = permissions.includes('member.invite');
+
+  useEffect(() => {
+    let active = true;
+    const tenantId = context?.tenantId;
+    if (!tenantId) {
+      setPermissions([]);
+      return;
+    }
+    void getAuthenticatedClient()
+      .then((client) => myPermissions(client, tenantId))
+      .then((codes) => {
+        if (active) setPermissions(codes);
+      })
+      .catch(() => {
+        if (active) setPermissions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [context?.tenantId]);
 
   const switchBranch = () => {
     if (!context) {
@@ -47,6 +71,13 @@ export default function WorkspaceScreen() {
     await clearSession();
     clearContext();
     router.replace('/(auth)/sign-in');
+  };
+
+  const confirmLogout = () => {
+    Alert.alert('Xác nhận đăng xuất', 'Bạn chắc chắn muốn đăng xuất khỏi thiết bị này?', [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Đăng xuất', style: 'destructive', onPress: () => void logout() },
+    ]);
   };
 
   return (
@@ -71,10 +102,25 @@ export default function WorkspaceScreen() {
             testID="workspace.logout"
             label="Dang xuat"
             variant="quiet"
-            onPress={() => void logout()}
+            onPress={confirmLogout}
           />
         </View>
       </Surface>
+      {canInvite ? (
+        <Surface testID="workspace.invite-panel" accessibilityLabel="Mời thành viên">
+          <Text style={styles.inviteLabel}>THÀNH VIÊN</Text>
+          <Text style={styles.inviteTitle}>Mời thành viên</Text>
+          <Text style={styles.inviteBody}>
+            Chọn vai trò, tạo mã lời mời và chia sẻ qua Zalo, Messenger hoặc SMS.
+          </Text>
+          <AppButton
+            testID="workspace.invite-member"
+            label="Mời thành viên"
+            variant="secondary"
+            onPress={() => router.push('/invite-member')}
+          />
+        </Surface>
+      ) : null}
       <View style={styles.section}>
         <SectionHeading title="Truy cập nhanh" detail="4 luồng chính" />
         <View style={styles.grid}>
@@ -107,6 +153,9 @@ const styles = StyleSheet.create({
   scopeTitle: { color: tokens.color.ink, fontSize: tokens.typography.heading, fontWeight: '800' },
   scopeBody: { color: tokens.color.muted, fontSize: tokens.typography.bodySmall, lineHeight: 20 },
   scopeActions: { gap: tokens.spacing.sm, marginTop: tokens.spacing.sm },
+  inviteLabel: { color: tokens.color.primary, fontSize: tokens.typography.label, fontWeight: '800' },
+  inviteTitle: { color: tokens.color.ink, fontSize: tokens.typography.heading, fontWeight: '800' },
+  inviteBody: { color: tokens.color.muted, fontSize: tokens.typography.bodySmall, lineHeight: 20 },
   section: { gap: tokens.spacing.md },
   grid: { gap: tokens.spacing.md },
   action: { gap: 7 },

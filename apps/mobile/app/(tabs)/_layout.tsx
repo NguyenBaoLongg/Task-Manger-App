@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getAuthenticatedClient } from '@/features/auth/session-runtime';
+import { startDashboardNavigationMeasurement } from '@/native/adsup-runtime';
 import { tabConfig } from '@/navigation/tab-config';
 import { tokens } from '@/theme/tokens';
 
@@ -44,6 +45,11 @@ export default function TabsLayout() {
         <Tabs.Screen
           key={tab.name}
           name={tab.name}
+          listeners={
+            tab.name === 'dashboard'
+              ? { tabPress: () => startDashboardNavigationMeasurement() }
+              : undefined
+          }
           options={{
             title: tab.label,
             tabBarButtonTestID: tab.testID,
