@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { ApiProblemError } from '@/api/problem';
 import { getAuthenticatedClient } from '@/features/auth/session-runtime';
 import { useTenantContextStore } from '@/tenant/tenant-context-store';
 import {
@@ -13,6 +14,7 @@ import { KpiSummary } from '@/features/dashboard/KpiSummary';
 import { EmptyState, ErrorState, LoadingState } from '@/components/async-states/AsyncState';
 import { AppButton, ScreenFrame, SectionHeading, Surface } from '@/components/ui/ScreenPrimitives';
 import { tokens } from '@/theme/tokens';
+import { markDashboardActionable } from '@/native/adsup-runtime';
 
 const quickActions = [
   {
@@ -46,7 +48,20 @@ export default function DashboardScreen() {
       .then((client) =>
         Promise.all([
           listEmployeeActionItems(client, context.tenantId),
-          getDailyKpiProgress(client, context.tenantId, date),
+          getDailyKpiProgress(client, context.tenantId, date).catch((error: unknown) => {
+            // A tenant without any KPI policy has nothing to show yet; the rest of the
+            // dashboard must still load instead of failing the whole screen.
+            if (error instanceof ApiProblemError && error.status === 404) return undefined;
+            // A member without an effective branch has no KPI scope yet; hide the KPI
+            // summary but keep the rest of the dashboard usable.
+            if (
+              error instanceof ApiProblemError &&
+              error.status === 422 &&
+              error.code === 'NO_ACTIVE_BRANCH'
+            )
+              return undefined;
+            throw error;
+          }),
         ]),
       )
       .then(([items, kpi]) => {
@@ -60,6 +75,20 @@ export default function DashboardScreen() {
   useEffect(() => {
     load();
   }, [context, date]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (state !== 'ready') return undefined;
+
+      // useFocusEffect runs for both the initial Dashboard route and warm tab navigation. Waiting
+      // one frame guarantees that the ready KPI/action-center tree has committed before native
+      // uptime is sampled, rather than timing a Detox launch handshake outside the app process.
+      const frame = requestAnimationFrame(() => {
+        void markDashboardActionable().catch(() => undefined);
+      });
+      return () => cancelAnimationFrame(frame);
+    }, [state]),
+  );
 
   if (state === 'loading') return <LoadingState label="Đang tải tổng quan" />;
   if (state === 'error') return <ErrorState label="Không thể tải tổng quan" onRetry={load} />;

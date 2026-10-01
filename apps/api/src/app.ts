@@ -120,6 +120,17 @@ export function createApp(deps: AppDependencies): Express {
       if (response.statusCode === 401) metrics.increment('authentication_denials_total');
       if (response.statusCode === 403) metrics.increment('authorization_denials_total');
       metrics.observe('http_request_duration_ms', performance.now() - startedAt);
+      if (response.statusCode >= 400) {
+        logger.warn(
+          {
+            method: request.method,
+            path: request.originalUrl,
+            status: response.statusCode,
+            correlationId,
+          },
+          'request completed with error status',
+        );
+      }
     });
     next();
   });
@@ -225,7 +236,7 @@ export function createApp(deps: AppDependencies): Express {
   if (deps.actionItemService) {
     app.use(
       '/v1',
-      actionItemRoutes(deps.tokens, deps.actionItemService, deps.authRepo, deps.rbacRepo),
+      actionItemRoutes(deps.tokens, deps.actionItemService, deps.authRepo),
     );
   }
   if (deps.actionItemManagementService) {

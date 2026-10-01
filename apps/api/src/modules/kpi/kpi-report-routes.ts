@@ -83,7 +83,6 @@ export function kpiReportRoutes(
     '/tenants/:tenantId/kpi/reports/:businessDate/progress',
     auth,
     scoped,
-    requireAnyScopedPermission(rbacRepo, 'kpi.view'),
     async (request: AuthenticatedRequest, response) => {
       const businessDate = businessDateSchema.parse(request.params.businessDate);
       response.json(
