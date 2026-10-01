@@ -1,0 +1,1 @@
+ALTER TYPE "ChatChannelType" ADD VALUE 'DIRECT';

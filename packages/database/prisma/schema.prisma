@@ -82,6 +82,7 @@ enum ChatChannelType {
   TENANT_GENERAL
   BRANCH
   GROUP
+  DIRECT
 }
 
 enum ChatChannelStatus {
@@ -96,6 +97,10 @@ enum ChatChannelRole {
 
 enum MessageType {
   TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
   SYSTEM
 }
 
@@ -752,6 +757,7 @@ model ChatMessage {
   clientMessageId           String      @map("client_message_id") @db.VarChar(100)
   body                      String      @db.Text
   messageType               MessageType @default(TEXT) @map("message_type")
+  mediaId                   String?     @map("media_id") @db.Uuid
   replyToMessageId          String?     @map("reply_to_message_id") @db.Uuid
   createdAt                 DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   editedAt                  DateTime?   @map("edited_at") @db.Timestamptz(3)
@@ -760,6 +766,7 @@ model ChatMessage {
   @@id([tenantId, id])
   @@unique([tenantId, authorMembershipId, clientMessageId])
   @@index([tenantId, channelId, createdAt, id])
+  @@index([tenantId, mediaId])
   @@map("chat_messages")
 }
 
@@ -777,6 +784,7 @@ model MediaObject {
   objectKey         String      @map("object_key") @db.VarChar(1024)
   contentType       String      @map("content_type") @db.VarChar(160)
   byteSize          BigInt      @map("byte_size")
+  durationMs        Int?        @map("duration_ms")
   checksumSha256    String      @map("checksum_sha256") @db.VarChar(64)
   status            MediaStatus @default(PENDING_UPLOAD)
   uploadExpiresAt   DateTime    @map("upload_expires_at") @db.Timestamptz(3)
