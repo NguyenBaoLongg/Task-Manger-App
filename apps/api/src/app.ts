@@ -57,6 +57,10 @@ import { formRoutes } from './modules/forms/form-routes.js';
 import { chatRoutes } from './modules/chat/chat-routes.js';
 import { notificationRoutes } from './modules/notifications/notification-routes.js';
 import { mediaRoutes } from './modules/media/media-routes.js';
+import {
+  devStorageRoutes,
+  type DevStorageRoutesDependencies,
+} from './modules/media/dev-storage-routes.js';
 import { auditRoutes } from './modules/audit/audit-routes.js';
 import { kpiConfigRoutes } from './modules/kpi/kpi-config-routes.js';
 import { kpiPolicyRoutes } from './modules/kpi/kpi-policy-routes.js';
@@ -101,6 +105,7 @@ export interface AppDependencies {
   bookingExports?: ExportRoutesDependencies;
   metrics?: Metrics;
   readiness?: () => Promise<boolean>;
+  devStorage?: DevStorageRoutesDependencies;
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -146,6 +151,7 @@ export function createApp(deps: AppDependencies): Express {
     });
   });
   app.get('/internal/metrics', (_request, response) => response.json(metrics.snapshot()));
+  if (deps.devStorage) app.use(devStorageRoutes(deps.devStorage));
   app.use('/v1', authRoutes(deps.authService, deps.tokens, deps.governance));
   app.use(
     '/v1',

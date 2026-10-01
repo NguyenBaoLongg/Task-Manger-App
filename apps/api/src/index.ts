@@ -199,7 +199,7 @@ const chatService = new ChatService(chatRepo, rbacRepo, realtime);
 const storage =
   config.objectStorageDriver === 's3'
     ? new S3ObjectStorage(config.s3.bucket, config.s3)
-    : new MemoryObjectStorage();
+    : new MemoryObjectStorage(`http://127.0.0.1:${config.port}`);
 const exportDownloadStorage =
   config.objectStorageDriver === 's3' ? storage : new LocalExportDownloadStorage();
 const mediaService = new MediaService(
@@ -229,6 +229,13 @@ const app = createApp({
   mediaService,
   auditRepo,
   governance,
+  devStorage:
+    storage instanceof MemoryObjectStorage
+      ? {
+          storage,
+          findPendingMediaByObjectKey: (objectKey) => mediaRepo.findByObjectKey(objectKey),
+        }
+      : undefined,
   kpiConfigService,
   kpiPolicyService,
   kpiReportService,

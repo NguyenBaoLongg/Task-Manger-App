@@ -116,6 +116,7 @@ live('Phase 10 PostgreSQL regressions', () => {
     await db.invitationAcceptance.deleteMany({ where: { tenantId } });
     await db.invitation.deleteMany({ where: { tenantId } });
     await db.chatMessage.deleteMany({ where: { tenantId } });
+    await db.mediaObject.deleteMany({ where: { tenantId } });
     await db.chatChannelMembership.deleteMany({ where: { tenantId } });
     await db.chatChannel.deleteMany({ where: { tenantId } });
     await db.formSubmission.deleteMany({ where: { tenantId } });
@@ -317,6 +318,128 @@ live('Phase 10 PostgreSQL regressions', () => {
     ]);
     const refreshed = await db.notificationEndpoint.findUniqueOrThrow({ where: { id: active.id } });
     expect(refreshed.lastSeenAt!.getTime()).toBeGreaterThan(old.getTime());
+  });
+
+  it('reuses one DIRECT channel per pair and labels it for the viewer', async () => {
+    const repository = new ChatNotificationsRepository(db);
+    const created = await repository.createChannel({
+      tenantId,
+      type: 'DIRECT',
+      name: '',
+      membershipIds: [employeeMembershipId],
+      createdByMembershipId: ownerMembershipId,
+    });
+    const reopened = await repository.createChannel({
+      tenantId,
+      type: 'DIRECT',
+      name: '',
+      membershipIds: [ownerMembershipId],
+      createdByMembershipId: employeeMembershipId,
+    });
+    expect(reopened.id).toBe(created.id);
+    expect(await db.chatChannel.count({ where: { tenantId, type: 'DIRECT' } })).toBe(1);
+
+    const ownerView = await repository.listChannels(tenantId, ownerMembershipId);
+    expect(ownerView.find((channel) => channel.id === created.id)?.name).toBe(
+      'Phase Ten Employee',
+    );
+    const employeeView = await repository.listChannels(tenantId, employeeMembershipId);
+    expect(employeeView.find((channel) => channel.id === created.id)?.name).toBe(
+      'Phase Ten Owner',
+    );
+
+    const members = await repository.listChannelMembers(tenantId, created.id);
+    expect(members).toHaveLength(2);
+    expect(members.map((member) => member.membershipId).sort()).toEqual(
+      [ownerMembershipId, employeeMembershipId].sort(),
+    );
+    expect(members.every((member) => member.displayName.length > 0)).toBe(true);
+
+    await expect(
+      repository.createChannel({
+        tenantId,
+        type: 'DIRECT',
+        name: '',
+        membershipIds: [employeeMembershipId, randomUUID()],
+        createdByMembershipId: ownerMembershipId,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      repository.createChannel({
+        tenantId,
+        type: 'DIRECT',
+        name: '',
+        membershipIds: [],
+        createdByMembershipId: ownerMembershipId,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('attaches READY media to a chat message and lists it back with kind, size and duration', async () => {
+    const repository = new ChatNotificationsRepository(db);
+    const channel = await repository.createChannel({
+      tenantId,
+      type: 'DIRECT',
+      name: '',
+      membershipIds: [employeeMembershipId],
+      createdByMembershipId: ownerMembershipId,
+    });
+    const voice = await db.mediaObject.create({
+      data: {
+        tenantId,
+        ownerMembershipId: employeeMembershipId,
+        sourceType: 'CHAT_MESSAGE',
+        purpose: 'CHAT_MESSAGE',
+        storageProvider: 'GCS',
+        bucket: 'phase10-media',
+        objectKey: `${tenantId}/chat/${randomUUID()}.m4a`,
+        contentType: 'audio/mp4',
+        byteSize: 42n,
+        durationMs: 12_300,
+        checksumSha256: 'a'.repeat(64),
+        status: 'READY',
+        readyAt: new Date(),
+        uploadExpiresAt: new Date(Date.now() + 15 * 60_000),
+      },
+    });
+
+    const created = await repository.createMessage({
+      tenantId,
+      channelId: channel.id,
+      authorMembershipId: employeeMembershipId,
+      authorDisplayNameSnapshot: 'Phase Ten Employee',
+      clientMessageId: `voice-${randomUUID()}`,
+      body: '',
+      messageType: 'AUDIO',
+      mediaId: voice.id,
+    });
+    await repository.createMessage({
+      tenantId,
+      channelId: channel.id,
+      authorMembershipId: employeeMembershipId,
+      authorDisplayNameSnapshot: 'Phase Ten Employee',
+      clientMessageId: `text-${randomUUID()}`,
+      body: 'Chào buổi sáng',
+      messageType: 'TEXT',
+    });
+
+    const page = await repository.listMessages(tenantId, channel.id);
+    const voiceRow = page.items.find((item) => item.id === created.id);
+    expect(voiceRow).toMatchObject({
+      messageType: 'AUDIO',
+      body: '',
+      mediaId: voice.id,
+      media: {
+        mediaId: voice.id,
+        contentType: 'audio/mp4',
+        byteSize: 42,
+        durationMs: 12_300,
+      },
+    });
+    expect(page.items.find((item) => item.mediaId === null)).toMatchObject({
+      messageType: 'TEXT',
+      media: null,
+    });
   });
 
   it('retires immutable form versions, archives templates and retains audited history', async () => {

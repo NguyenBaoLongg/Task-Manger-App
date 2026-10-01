@@ -3,6 +3,21 @@ import { retentionUntilForMedia } from '@adsup/domain';
 
 export class MediaRepository {
   constructor(private readonly db: DatabaseClient) {}
+  async findByObjectKey(objectKey: string) {
+    return this.db.mediaObject.findFirst({
+      where: { objectKey },
+      select: {
+        tenantId: true,
+        id: true,
+        objectKey: true,
+        contentType: true,
+        byteSize: true,
+        checksumSha256: true,
+        status: true,
+        uploadExpiresAt: true,
+      },
+    });
+  }
   createIntent(data: {
     tenantId: string;
     ownerMembershipId: string;
@@ -16,6 +31,7 @@ export class MediaRepository {
     objectKey: string;
     contentType: string;
     byteSize: bigint;
+    durationMs?: number | null;
     checksumSha256: string;
     uploadExpiresAt: Date;
     correlationId: string;
@@ -47,6 +63,7 @@ export class MediaRepository {
           objectKey: data.objectKey,
           contentType: data.contentType,
           byteSize: data.byteSize,
+          durationMs: data.durationMs ?? undefined,
           checksumSha256: data.checksumSha256,
           uploadExpiresAt: data.uploadExpiresAt,
           retentionUntil: retentionPolicy

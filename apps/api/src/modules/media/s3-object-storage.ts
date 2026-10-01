@@ -83,6 +83,7 @@ export class S3ObjectStorage implements ObjectStoragePort {
 
 export class MemoryObjectStorage implements ObjectStoragePort {
   private readonly objects = new Map<string, StoredObjectMetadata>();
+  constructor(private readonly devBaseUrl?: string) {}
   put(objectKey: string, metadata: StoredObjectMetadata) {
     this.objects.set(objectKey, metadata);
   }
@@ -94,7 +95,12 @@ export class MemoryObjectStorage implements ObjectStoragePort {
     expiresInSeconds: number;
   }) {
     return {
-      url: `memory://upload/${encodeURIComponent(input.objectKey)}`,
+      // A memory:// URL is unreachable by design; when the API knows its own base URL the
+      // dev-storage route serves as the PUT target so the local flow matches production.
+      url:
+        this.devBaseUrl
+          ? `${this.devBaseUrl}/dev-storage/${encodeURIComponent(input.objectKey)}`
+          : `memory://upload/${encodeURIComponent(input.objectKey)}`,
       expiresAt: new Date(Date.now() + input.expiresInSeconds * 1_000),
       requiredHeaders: {
         'content-type': input.contentType,
@@ -107,7 +113,10 @@ export class MemoryObjectStorage implements ObjectStoragePort {
   }
   async createDownloadUrl(objectKey: string, expiresInSeconds: number) {
     return {
-      url: `memory://download/${encodeURIComponent(objectKey)}`,
+      // Same dev-storage route serves GET so the mobile client can actually fetch bytes locally.
+      url: this.devBaseUrl
+        ? `${this.devBaseUrl}/dev-storage/${encodeURIComponent(objectKey)}`
+        : `memory://download/${encodeURIComponent(objectKey)}`,
       expiresAt: new Date(Date.now() + expiresInSeconds * 1_000),
     };
   }
