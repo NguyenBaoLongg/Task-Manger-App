@@ -1,4 +1,9 @@
-export type GoogleAuthResult = { idToken: string; email?: string; displayName?: string };
+export type GoogleAuthResult = {
+  idToken?: string;
+  email?: string;
+  displayName?: string;
+  cancelled?: boolean;
+};
 
 export type GoogleProvider = {
   signIn: () => Promise<GoogleAuthResult>;

@@ -16,11 +16,12 @@ const getCoordinator = () => {
   });
   coordinator = createSessionCoordinator({
     storage,
-    refresh: (refreshToken) =>
+    refresh: (refreshToken, idempotencyKey) =>
       publicClient
         .request<BackendAuthResponse>('/v1/auth/refresh', {
           method: 'POST',
           body: { refreshToken },
+          idempotencyKey,
         })
         .then(toSessionTokens),
   });
@@ -41,6 +42,9 @@ export const getAuthenticatedClient = async () => {
   return createApiClient({
     baseUrl: getRuntimeConfig().apiBaseUrl,
     getAccessToken: session.getAccessToken,
+    // Access tokens only live 15 minutes; a 401 means the token expired while the
+    // app was open, so refresh once and retry the request transparently.
+    refreshAccessToken: () => session.refreshIfNeeded(true).catch(() => undefined),
   });
 };
 

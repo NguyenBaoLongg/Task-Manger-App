@@ -15,6 +15,10 @@ const config: ExpoConfig = {
       'expo-camera',
       { cameraPermission: 'Cho phep Adsup dung camera cho cham cong va anh chung minh.' },
     ],
+    [
+      'expo-image-picker',
+      { photosPermission: 'Cho phep Adsup truy cap thu vien de chon video cham cong.' },
+    ],
     'expo-secure-store',
     'expo-notifications',
   ],
@@ -35,6 +39,11 @@ const config: ExpoConfig = {
       'string'
         ? (process.env as unknown as Record<string, string>).EXPO_PUBLIC_API_BASE_URL
         : 'http://localhost:3000',
+    googleClientId:
+      typeof (process.env as unknown as Record<string, unknown>).EXPO_PUBLIC_GOOGLE_CLIENT_ID ===
+      'string'
+        ? (process.env as unknown as Record<string, string>).EXPO_PUBLIC_GOOGLE_CLIENT_ID
+        : undefined,
   },
 };
 

@@ -10,12 +10,15 @@ type AuthResult = {
   profileComplete: boolean;
 };
 
+export type SignInOutcome = AuthResult | 'cancelled';
+
 export const signInWithProvider = async (
   provider: GoogleProvider,
   client: ApiClient,
   idempotencyKey: string,
-): Promise<AuthResult> => {
+): Promise<SignInOutcome> => {
   const identity = await provider.signIn();
+  if (identity.cancelled || !identity.idToken) return 'cancelled';
   const response = await client.request<BackendAuthResponse>('/v1/auth/google', {
     method: 'POST',
     body: { idToken: identity.idToken },

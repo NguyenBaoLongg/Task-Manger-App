@@ -1,5 +1,7 @@
 import type { SessionTokens } from './secure-session-storage';
 
+export type SessionTokensInput = Omit<SessionTokens, 'refreshIdempotencyKey'>;
+
 export type SessionStorage = {
   load: () => Promise<SessionTokens | undefined>;
   save: (value: SessionTokens) => Promise<void>;
@@ -8,15 +10,26 @@ export type SessionStorage = {
 
 type SessionOptions = {
   storage: SessionStorage;
-  refresh: (refreshToken: string) => Promise<SessionTokens>;
+  refresh: (refreshToken: string, idempotencyKey: string) => Promise<SessionTokensInput>;
 };
+
+const freshRefreshIdempotencyKey = () =>
+  `mobile-refresh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+const withRefreshIdempotencyKey = (tokens: SessionTokensInput): SessionTokens =>
+  'refreshIdempotencyKey' in tokens && tokens.refreshIdempotencyKey
+    ? (tokens as SessionTokens)
+    : { ...tokens, refreshIdempotencyKey: freshRefreshIdempotencyKey() };
 
 export const createSessionCoordinator = ({ storage, refresh }: SessionOptions) => {
   let current: SessionTokens | undefined;
   let refreshFlight: Promise<string> | undefined;
 
   const ensureLoaded = async () => {
-    current ??= await storage.load();
+    if (!current) {
+      const stored = await storage.load();
+      current = stored ? withRefreshIdempotencyKey(stored) : undefined;
+    }
     return current;
   };
 
@@ -25,11 +38,13 @@ export const createSessionCoordinator = ({ storage, refresh }: SessionOptions) =
     if (!loaded) throw new Error('SESSION_REQUIRED');
     if (!force && loaded.expiresAt > Date.now() + 30_000) return loaded.accessToken;
     if (refreshFlight) return refreshFlight;
-    refreshFlight = refresh(loaded.refreshToken)
+    refreshFlight = refresh(loaded.refreshToken, loaded.refreshIdempotencyKey)
       .then(async (next) => {
-        current = next;
-        await storage.save(next);
-        return next.accessToken;
+        // Rotate only after a confirmed success so a retried refresh replays
+        // the stored response instead of being treated as a replay.
+        current = withRefreshIdempotencyKey(next);
+        await storage.save(current);
+        return current.accessToken;
       })
       .catch(async (error: unknown) => {
         current = undefined;
@@ -46,9 +61,9 @@ export const createSessionCoordinator = ({ storage, refresh }: SessionOptions) =
     getAccessToken: () => current?.accessToken,
     refreshIfNeeded,
     load: ensureLoaded,
-    set: async (tokens: SessionTokens) => {
-      current = tokens;
-      await storage.save(tokens);
+    set: async (tokens: SessionTokensInput) => {
+      current = withRefreshIdempotencyKey(tokens);
+      await storage.save(current);
     },
     logout: async () => {
       current = undefined;

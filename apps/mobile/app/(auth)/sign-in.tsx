@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,27 +8,37 @@ import { BrandLogo } from '@/components/brand/BrandLogo';
 import { tokens } from '@/theme/tokens';
 import { createApiClient } from '@/api/api-client';
 import { getRuntimeConfig } from '@/config/runtime-config';
-import { createAuthTestDouble } from '@/auth/auth-test-double';
+import { createGoogleProvider } from '@/auth/provider-factory';
 import { signInWithProvider } from '@/features/auth/sign-in-model';
 import { saveSession } from '@/features/auth/session-runtime';
+import { markSignInActionable } from '@/native/adsup-runtime';
 
 export default function SignInScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const markedActionableRef = useRef(false);
+
+  useEffect(() => {
+    if (markedActionableRef.current) return;
+    markedActionableRef.current = true;
+    void markSignInActionable();
+  }, []);
 
   const signIn = async () => {
     setBusy(true);
     setError(undefined);
     try {
+      const provider = createGoogleProvider();
       const client = createApiClient({
         baseUrl: getRuntimeConfig().apiBaseUrl,
         getAccessToken: () => undefined,
       });
       const result = await signInWithProvider(
-        createAuthTestDouble(),
+        provider,
         client,
         `mobile-sign-in-${Date.now()}`,
       );
+      if (result === 'cancelled') return;
       await saveSession({
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
@@ -38,14 +48,25 @@ export default function SignInScreen() {
         result.profileComplete ? '/(auth)/workspace-selection' : '/(auth)/profile-confirmation',
       );
     } catch (caught) {
-      if (caught instanceof ApiProblemError) {
+      if (caught instanceof Error && caught.message.includes('EXPO_PUBLIC_GOOGLE_CLIENT_ID')) {
+        setError(caught.message);
+      } else if (caught instanceof ApiProblemError) {
         setError(
-          caught.status === 401
-            ? 'Phiên đăng nhập local chưa được chấp nhận. Hãy chạy API với AUTH_GOOGLE_MODE=fake.'
-            : `Đăng nhập thất bại (${caught.code}). Hãy kiểm tra API ở cổng 3000.`,
+          caught.status === 403
+            ? 'Tài khoản đã bị khóa. Hãy liên hệ quản trị viên công ty.'
+            : caught.status === 401
+              ? 'Google không xác nhận được tài khoản. Hãy thử lại.'
+              : `Đăng nhập thất bại (${caught.code}). Hãy thử lại.`,
+        );
+      } else if (caught instanceof Error) {
+        const code = (caught as { code?: unknown }).code;
+        const codeText =
+          typeof code === 'string' ? code : code == null ? '' : JSON.stringify(code);
+        setError(
+          `Đăng nhập thất bại${codeText ? ` (${codeText})` : ''}: ${caught.message || 'lỗi không xác định'}.`,
         );
       } else {
-        setError('Không thể kết nối API. Hãy kiểm tra kết nối mạng rồi thử lại.');
+        setError('Không thể kết nối máy chủ. Hãy kiểm tra kết nối mạng rồi thử lại.');
       }
     } finally {
       setBusy(false);
@@ -82,7 +103,7 @@ export default function SignInScreen() {
           <Pressable
             testID="auth.sign-in"
             accessibilityRole="button"
-            accessibilityLabel="Đăng nhập nội bộ"
+            accessibilityLabel="Đăng nhập bằng Google"
             accessibilityState={{ disabled: busy }}
             style={({ pressed }) => [
               styles.button,
@@ -92,8 +113,10 @@ export default function SignInScreen() {
             disabled={busy}
             onPress={() => void signIn()}
           >
-            <Ionicons name="log-in-outline" size={21} color={tokens.color.inkInverted} />
-            <Text style={styles.buttonText}>{busy ? 'Đang kết nối...' : 'Đăng nhập nội bộ'}</Text>
+            <Ionicons name="logo-google" size={21} color={tokens.color.inkInverted} />
+            <Text style={styles.buttonText}>
+              {busy ? 'Đang kết nối...' : 'Đăng nhập bằng Google'}
+            </Text>
             <Ionicons name="arrow-forward" size={20} color={tokens.color.inkInverted} />
           </Pressable>
           {error ? (

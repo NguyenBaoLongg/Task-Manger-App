@@ -61,4 +61,47 @@ describe('authenticated API client', () => {
     const firstHeaders = firstCall?.[1]?.headers as Record<string, string>;
     expect(firstHeaders['Idempotency-Key']).toBe('idem-1');
   });
+
+  it('refreshes the access token once and retries when a request returns 401', async () => {
+    const fetchImpl = jest.fn() as jest.MockedFunction<typeof fetch>;
+    fetchImpl
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'AUTHENTICATION_REQUIRED' }), { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ tenantId: 'tenant-1', membershipId: 'm-1', name: 'Demo' }]), {
+          status: 200,
+        }),
+      );
+    const refreshAccessToken = jest.fn().mockResolvedValue('access-fresh');
+    const client = createApiClient({
+      baseUrl: 'https://api.example.test',
+      getAccessToken: () => 'access-expired',
+      refreshAccessToken,
+      fetchImpl,
+    });
+
+    const items = await client.request<unknown[]>('/v1/me/tenants');
+    expect(items).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    const retryHeaders = fetchImpl.mock.calls[1]![1]?.headers as Record<string, string>;
+    expect(retryHeaders.Authorization).toBe('Bearer access-fresh');
+  });
+
+  it('does not retry when the token refresh itself fails', async () => {
+    const fetchImpl = jest.fn() as jest.MockedFunction<typeof fetch>;
+    fetchImpl.mockResolvedValue(
+      new Response(JSON.stringify({ code: 'AUTHENTICATION_REQUIRED' }), { status: 401 }),
+    );
+    const client = createApiClient({
+      baseUrl: 'https://api.example.test',
+      getAccessToken: () => 'access-expired',
+      refreshAccessToken: jest.fn().mockResolvedValue(undefined),
+      fetchImpl,
+    });
+
+    await expect(client.request('/v1/me/tenants')).rejects.toMatchObject({
+      code: 'AUTHENTICATION_REQUIRED',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

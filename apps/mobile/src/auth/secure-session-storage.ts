@@ -4,6 +4,7 @@ export type SessionTokens = {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+  refreshIdempotencyKey: string;
 };
 
 const SESSION_KEY = 'adsup.mobile.session.v1';
