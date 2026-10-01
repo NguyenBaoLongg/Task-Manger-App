@@ -195,6 +195,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TenantMembershipSummary' }
         '422': { $ref: '#/components/responses/ValidationProblem' }
+        '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
         '409': { $ref: '#/components/responses/ConflictProblem' }
         '410': { $ref: '#/components/responses/GoneProblem' }
 
@@ -250,6 +252,7 @@ paths:
               schema: { $ref: '#/components/schemas/InvitationCreated' }
         '403': { $ref: '#/components/responses/ForbiddenProblem' }
         '409': { $ref: '#/components/responses/ConflictProblem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
     get:
       tags: [Tenants]
       operationId: listInvitations
@@ -532,6 +535,26 @@ paths:
               schema: { $ref: '#/components/schemas/Assignment' }
         '409': { $ref: '#/components/responses/ConflictProblem' }
 
+  /v1/tenants/{tenantId}/me/permissions:
+    get:
+      tags: [RBAC]
+      operationId: listMyPermissions
+      x-permission: none
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Effective permission codes of the authenticated membership
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [codes]
+                properties:
+                  codes:
+                    type: array
+                    items: { type: string }
+        '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
   /v1/tenants/{tenantId}/roles:
     get:
       tags: [RBAC]
@@ -546,6 +569,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Role' }
+        '403': { $ref: '#/components/responses/ForbiddenProblem' }
     post:
       tags: [RBAC]
       operationId: createRole

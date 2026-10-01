@@ -586,6 +586,32 @@ export class OrganizationRbacRepository {
       ].sort(),
     };
   }
+
+  async listEffectivePermissionCodes(tenantId: string, membershipId: string): Promise<string[]> {
+    const now = new Date();
+    const roleIds = (
+      await this.db.membershipRoleBinding.findMany({
+        where: {
+          tenantId,
+          membershipId,
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+        },
+        select: { roleId: true },
+      })
+    ).map((binding) => binding.roleId);
+    if (roleIds.length === 0) return [];
+    const permissions = await this.db.rolePermission.findMany({
+      where: { tenantId, roleId: { in: roleIds } },
+      select: { permissionId: true },
+    });
+    if (permissions.length === 0) return [];
+    const codes = await this.db.permission.findMany({
+      where: { id: { in: [...new Set(permissions.map((item) => item.permissionId))] } },
+      select: { code: true },
+    });
+    return codes.map((permission) => permission.code).sort();
+  }
 }
 
 interface LifecycleUpdate {

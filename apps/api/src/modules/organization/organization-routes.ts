@@ -63,6 +63,7 @@ export function organizationRoutes(
           service.createBranch({
             tenantId: request.tenant!.tenantId,
             actorMembershipId: request.tenant!.membershipId,
+            correlationId: request.header('x-correlation-id'),
             ...body,
           }),
         ),

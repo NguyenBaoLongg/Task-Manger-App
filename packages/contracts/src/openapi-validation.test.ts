@@ -9,7 +9,7 @@ describe('OpenAPI quality gate', () => {
     expect((document.components as Record<string, unknown>).schemas).toBeTypeOf('object');
   });
 
-  it('conforms all 47 operations to idempotency, field, status and cursor decisions', async () => {
+  it('conforms all 48 operations to idempotency, field, status and cursor decisions', async () => {
     const document = await loadOpenApiDocument();
     const paths = document.paths as Record<string, Record<string, Operation>>;
     const operations = Object.entries(paths).flatMap(([path, item]) =>
@@ -17,10 +17,10 @@ describe('OpenAPI quality gate', () => {
         .filter(([method]) => methods.has(method))
         .map(([method, operation]) => ({ path, method, operation })),
     );
-    expect(operations).toHaveLength(47);
+    expect(operations).toHaveLength(48);
     const ids = operations.map(({ operation }) => operation.operationId);
     expect(ids.every(Boolean)).toBe(true);
-    expect(new Set(ids)).toHaveProperty('size', 47);
+    expect(new Set(ids)).toHaveProperty('size', 48);
 
     const idempotentOperations = new Set([
       'authenticateWithGoogle',

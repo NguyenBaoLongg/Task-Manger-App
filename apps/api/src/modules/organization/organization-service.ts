@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ProblemError } from '@adsup/domain';
 import type {
   Assignment,
@@ -12,20 +13,38 @@ export class OrganizationService {
   listBranches(tenantId: string): Promise<Branch[]> {
     return this.repository.listBranches(tenantId);
   }
-  createBranch(input: {
+  async createBranch(input: {
     tenantId: string;
     code: string;
     name: string;
     timezoneOverride?: string;
     actorMembershipId: string;
+    correlationId?: string;
   }): Promise<Branch> {
-    return this.repository.createBranch({
+    const branch = await this.repository.createBranch({
       tenantId: input.tenantId,
       code: input.code.trim().toUpperCase(),
       name: input.name.trim(),
       timezoneOverride: input.timezoneOverride,
       createdByMembershipId: input.actorMembershipId,
     });
+    // The first branch of a tenant is created by its owner during onboarding. Auto-assign the
+    // creator so KPI scoping (resolveSoleCurrentBranch) does not dead-end with "no active branch".
+    const otherActive = (await this.repository.listBranches(input.tenantId)).filter(
+      (item) => item.id !== branch.id && item.status === 'ACTIVE',
+    );
+    if (otherActive.length === 0) {
+      await this.repository.createAssignment({
+        tenantId: input.tenantId,
+        membershipId: input.actorMembershipId,
+        branchId: branch.id,
+        effectiveFrom: new Date(),
+        createdByMembershipId: input.actorMembershipId,
+        reason: 'BRANCH_CREATED_BY_MEMBER',
+        correlationId: input.correlationId ?? randomUUID(),
+      });
+    }
+    return branch;
   }
   listDepartments(tenantId: string): Promise<Department[]> {
     return this.repository.listDepartments(tenantId);

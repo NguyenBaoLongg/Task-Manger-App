@@ -13,6 +13,9 @@ export class RbacService {
   listRoles(tenantId: string) {
     return this.repository.listRoles(tenantId);
   }
+  myPermissionCodes(tenantId: string, membershipId: string): Promise<string[]> {
+    return this.repository.listEffectivePermissionCodes(tenantId, membershipId);
+  }
   createRole(input: {
     tenantId: string;
     code: string;

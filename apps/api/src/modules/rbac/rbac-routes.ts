@@ -139,6 +139,18 @@ export function rbacRoutes(
     },
   );
   router.get(
+    '/tenants/:tenantId/me/permissions',
+    auth,
+    scoped,
+    async (request: AuthenticatedRequest, response) =>
+      response.json({
+        codes: await service.myPermissionCodes(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+        ),
+      }),
+  );
+  router.get(
     '/tenants/:tenantId/roles',
     auth,
     scoped,

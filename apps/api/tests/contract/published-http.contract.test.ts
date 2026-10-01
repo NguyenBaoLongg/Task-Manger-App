@@ -121,6 +121,9 @@ export function dependencies(overrides: Partial<AppDependencies> = {}): AppDepen
       async grantBinding() {
         return { id: uuid };
       },
+      async myPermissionCodes() {
+        return [];
+      },
     },
     rbacRepo: {
       async hasPermission() {
@@ -212,7 +215,7 @@ describe('published HTTP conformance', () => {
         .map(([method, operation]) => ({ path, method, operation }))
         .filter(({ operation }) => operation.security?.length !== 0),
     );
-    expect(protectedOperations).toHaveLength(43);
+    expect(protectedOperations).toHaveLength(44);
     const app = createApp(dependencies());
     for (const { path, method, operation } of protectedOperations) {
       const concretePath = path.replaceAll(/\{[^}]+\}/g, uuid);
@@ -232,7 +235,7 @@ describe('published HTTP conformance', () => {
         .filter(([method]) => methods.has(method))
         .map(([method, operation]) => ({ path, method, operation })),
     );
-    expect(operations).toHaveLength(47);
+    expect(operations).toHaveLength(48);
     const app = createApp(dependencies());
     for (const { path, method, operation } of operations) {
       const operationId = operation.operationId!;
@@ -260,6 +263,15 @@ describe('published HTTP conformance', () => {
     expect(invalidGoogle.body.code).toBe('VALIDATION_FAILED');
     const invalidRefresh = await request(app).post('/v1/auth/refresh').send({});
     expect(invalidRefresh.status).toBe(422);
+    const refreshWithoutHeader = await request(app)
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: 'x'.repeat(32) });
+    expect(refreshWithoutHeader.status).toBe(200);
+    const refreshWithShortKey = await request(app)
+      .post('/v1/auth/refresh')
+      .set('idempotency-key', 'short')
+      .send({ refreshToken: 'x'.repeat(32) });
+    expect(refreshWithShortKey.status).toBe(422);
     const extraField = await request(app)
       .post('/v1/auth/google')
       .set('idempotency-key', 'http-google-extra')
