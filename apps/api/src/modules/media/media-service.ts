@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { ProblemError, type ObjectStoragePort } from '@adsup/domain';
 import type { MediaRepository, OrganizationRbacRepository } from '@adsup/database';
 
-const allowedContentTypes = /^(image\/(jpeg|png|webp)|video\/mp4|application\/pdf)$/;
+const allowedContentTypes =
+  /^(image\/(jpeg|png|webp)|video\/mp4|audio\/mp4|application\/pdf)$/;
 const sensitiveMediaLogKeys =
   /url|objectkey|bucket|token|secret|checksum|customer|displayname|phone|email|note/i;
 
@@ -31,6 +32,7 @@ export class MediaService {
     purpose: string;
     contentType: string;
     byteSize: number;
+    durationMs?: number | null;
     checksumSha256: string;
     correlationId: string;
   }) {
@@ -39,7 +41,8 @@ export class MediaService {
       !allowedContentTypes.test(input.contentType) ||
       input.byteSize < 1 ||
       input.byteSize > 524_288_000 ||
-      !/^[0-9a-f]{64}$/.test(checksum)
+      !/^[0-9a-f]{64}$/.test(checksum) ||
+      (input.durationMs !== undefined && input.durationMs !== null && input.durationMs < 1)
     )
       throw new ProblemError(
         422,
@@ -120,6 +123,7 @@ export class MediaService {
       objectKey,
       contentType: input.contentType,
       byteSize: BigInt(input.byteSize),
+      durationMs: input.durationMs ?? null,
       checksumSha256: checksum,
       uploadExpiresAt: new Date(Date.now() + this.signedUrlTtlSeconds * 1_000),
       correlationId: input.correlationId,

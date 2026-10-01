@@ -7,6 +7,7 @@ import type {
 } from '@adsup/database';
 import type { TokenService } from '../auth/token-service.js';
 import type { ChatService } from './chat-service.js';
+import { ProblemError } from '@adsup/domain';
 import {
   authenticate,
   requirePermission,
@@ -39,16 +40,11 @@ export function chatRoutes(
     '/tenants/:tenantId/channels',
     auth,
     scoped,
-    requirePermission(
-      rbacRepo,
-      'chat.manage',
-      (request) => request.body?.branchId as string | undefined,
-    ),
     async (request: AuthenticatedRequest, response) => {
       const body = z
         .object({
-          type: z.enum(['BRANCH', 'GROUP']),
-          name: z.string().min(2).max(120),
+          type: z.enum(['BRANCH', 'GROUP', 'DIRECT']),
+          name: z.string().min(2).max(120).optional(),
           branchId: z.string().uuid().nullable().optional(),
           membershipIds: z
             .array(z.string().uuid())
@@ -59,7 +55,26 @@ export function chatRoutes(
             .default([]),
         })
         .strict()
+        .superRefine((value, ctx) => {
+          if (value.type !== 'DIRECT' && (value.name === undefined || value.name.trim().length < 2))
+            ctx.addIssue({
+              code: 'custom',
+              path: ['name'],
+              message: 'name is required for BRANCH and GROUP channels',
+            });
+        })
         .parse(request.body);
+      // Any ACTIVE member may open a GROUP chat; curated BRANCH channels still require chat.manage.
+      if (body.type === 'BRANCH') {
+        const allowed = await rbacRepo.hasPermission(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+          'chat.manage',
+          body.branchId ?? undefined,
+        );
+        if (!allowed)
+          throw new ProblemError(403, 'AUTHORIZATION_DENIED', 'Không có quyền tạo kênh chi nhánh.');
+      }
       response.status(201).json(
         await tenantIdempotent(governance, request, 'chat-channel.create', body, () =>
           service.createChannel({
@@ -70,6 +85,20 @@ export function chatRoutes(
         ),
       );
     },
+  );
+  router.get(
+    '/tenants/:tenantId/channels/:channelId/members',
+    auth,
+    scoped,
+    requirePermission(rbacRepo, 'chat.read'),
+    async (request: AuthenticatedRequest, response) =>
+      response.json(
+        await service.listChannelMembers(
+          request.tenant!.tenantId,
+          request.tenant!.membershipId,
+          String(request.params.channelId),
+        ),
+      ),
   );
   router.get(
     '/tenants/:tenantId/channels/:channelId/messages',
@@ -118,17 +147,29 @@ export function chatRoutes(
       const body = z
         .object({
           clientMessageId: z.string().min(8).max(100),
-          body: z.string().min(1).max(4000),
+          body: z.string().max(4000).optional(),
+          mediaId: z.string().uuid().optional(),
           replyToMessageId: z.string().uuid().optional(),
         })
         .strict()
+        .superRefine((value, ctx) => {
+          if (!value.mediaId && (value.body === undefined || value.body.trim().length < 1))
+            ctx.addIssue({
+              code: 'custom',
+              path: ['body'],
+              message: 'body is required when the message has no mediaId',
+            });
+        })
         .parse(request.body);
       const message = await tenantIdempotent(governance, request, 'chat-message.create', body, () =>
         service.send({
           tenantId: request.tenant!.tenantId,
           channelId: String(request.params.channelId),
           actorMembershipId: request.tenant!.membershipId,
-          ...body,
+          clientMessageId: body.clientMessageId,
+          body: body.body ?? '',
+          mediaId: body.mediaId,
+          replyToMessageId: body.replyToMessageId,
         }),
       );
       response

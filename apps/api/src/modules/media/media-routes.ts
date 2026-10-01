@@ -58,9 +58,11 @@ export function mediaRoutes(
             'image/png',
             'image/webp',
             'video/mp4',
+            'audio/mp4',
             'application/pdf',
           ]),
           byteSize: z.number().int().positive().max(524_288_000),
+          durationMs: z.number().int().positive().max(86_400_000).optional(),
           checksumSha256: z
             .string()
             .length(64)

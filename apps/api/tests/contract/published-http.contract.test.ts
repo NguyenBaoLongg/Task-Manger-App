@@ -160,6 +160,9 @@ export function dependencies(overrides: Partial<AppDependencies> = {}): AppDepen
       async createChannel() {
         return { id: uuid };
       },
+      async listChannelMembers() {
+        return [{ membershipId: uuid, displayName: 'Test User', role: 'MODERATOR' }];
+      },
       async listMessages() {
         return { items: [], nextCursor: null };
       },
@@ -215,7 +218,7 @@ describe('published HTTP conformance', () => {
         .map(([method, operation]) => ({ path, method, operation }))
         .filter(({ operation }) => operation.security?.length !== 0),
     );
-    expect(protectedOperations).toHaveLength(44);
+    expect(protectedOperations).toHaveLength(45);
     const app = createApp(dependencies());
     for (const { path, method, operation } of protectedOperations) {
       const concretePath = path.replaceAll(/\{[^}]+\}/g, uuid);
@@ -235,7 +238,7 @@ describe('published HTTP conformance', () => {
         .filter(([method]) => methods.has(method))
         .map(([method, operation]) => ({ path, method, operation })),
     );
-    expect(operations).toHaveLength(48);
+    expect(operations).toHaveLength(49);
     const app = createApp(dependencies());
     for (const { path, method, operation } of operations) {
       const operationId = operation.operationId!;
@@ -403,6 +406,7 @@ const successBodies: Record<string, unknown> = {
   retireFormVersion: { reason: 'Retire form version' },
   submitDynamicForm: { formVersionId: uuid, data: {} },
   createChannel: { type: 'GROUP', name: 'Group channel', membershipIds: [] },
+  listChannelMembers: {},
   sendMessage: { clientMessageId: 'message-0001', body: 'Hello' },
   registerNotificationEndpoint: {
     platform: 'ANDROID',

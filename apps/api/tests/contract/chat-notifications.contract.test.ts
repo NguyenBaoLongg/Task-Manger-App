@@ -5,6 +5,7 @@ describe('chat and notification HTTP contract', () => {
     expectOperations([
       'listChannels',
       'createChannel',
+      'listChannelMembers',
       'listMessages',
       'sendMessage',
       'registerNotificationEndpoint',

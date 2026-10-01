@@ -1,6 +1,15 @@
 import type { DatabaseClient } from './client.js';
+import type { ChatMessage } from './generated/prisma/client.js';
 import { ProblemError } from '@adsup/domain';
 import { decodeTimeCursor, encodeTimeCursor } from './cursor.js';
+
+export type ChatMessageMedia = {
+  mediaId: string;
+  contentType: string;
+  byteSize: number;
+  durationMs: number | null;
+};
+export type ChatMessageWithMedia = ChatMessage & { media: ChatMessageMedia | null };
 
 export class ChatNotificationsRepository {
   constructor(private readonly db: DatabaseClient) {}
@@ -59,12 +68,36 @@ export class ChatNotificationsRepository {
           },
         });
 
+        // A DM is labelled for the viewer: each side sees the other person's name, not the stored
+        // (empty) channel name.
+        let name = channel.name;
+        if (channel.type === 'DIRECT') {
+          const peer = await this.db.chatChannelMembership.findFirst({
+            where: {
+              tenantId,
+              channelId: channel.id,
+              membershipId: { not: membershipId },
+              leftAt: null,
+            },
+            select: { membershipId: true },
+          });
+          if (peer) {
+            const peerMembership = await this.db.tenantMembership.findUnique({
+              where: { tenantId_id: { tenantId, id: peer.membershipId } },
+              select: { membershipDisplayName: true },
+            });
+            name = peerMembership?.membershipDisplayName ?? name;
+          }
+        }
+
         return {
           ...channel,
+          name,
           lastMessage: lastMessage
             ? {
                 id: lastMessage.id,
                 body: lastMessage.body,
+                messageType: lastMessage.messageType,
                 authorMembershipId: lastMessage.authorMembershipId,
                 authorDisplayName: lastMessage.authorDisplayNameSnapshot,
                 createdAt: lastMessage.createdAt,
@@ -99,7 +132,7 @@ export class ChatNotificationsRepository {
   }
   createChannel(data: {
     tenantId: string;
-    type: 'BRANCH' | 'GROUP';
+    type: 'BRANCH' | 'GROUP' | 'DIRECT';
     name: string;
     branchId?: string | null;
     membershipIds: string[];
@@ -114,6 +147,41 @@ export class ChatNotificationsRepository {
         });
         if (!branch || branch.status !== 'ACTIVE')
           throw new ProblemError(409, 'CONFLICT', 'Cơ sở của kênh không còn hoạt động.');
+      }
+      if (data.type === 'DIRECT') {
+        const others = [
+          ...new Set(data.membershipIds.filter((id) => id !== data.createdByMembershipId)),
+        ];
+        const other = others[0];
+        if (others.length !== 1 || !other)
+          throw new ProblemError(422, 'VALIDATION_FAILED', 'Tin nhắn riêng cần đúng một thành viên.');
+        const mine = await tx.chatChannelMembership.findMany({
+          where: { tenantId: data.tenantId, membershipId: data.createdByMembershipId, leftAt: null },
+          select: { channelId: true },
+        });
+        if (mine.length) {
+          const shared = await tx.chatChannelMembership.findMany({
+            where: {
+              tenantId: data.tenantId,
+              membershipId: other,
+              leftAt: null,
+              channelId: { in: mine.map((row) => row.channelId) },
+            },
+            select: { channelId: true },
+          });
+          const existing = shared.length
+            ? await tx.chatChannel.findFirst({
+                where: {
+                  tenantId: data.tenantId,
+                  type: 'DIRECT',
+                  id: { in: shared.map((row) => row.channelId) },
+                },
+              })
+            : null;
+          // A pair has exactly one DM: a second request reopens the existing channel instead of
+          // forking the history into a new one.
+          if (existing) return existing;
+        }
       }
       const membershipIds = [...new Set([data.createdByMembershipId, ...data.membershipIds])];
       const activeCount = await tx.tenantMembership.count({
@@ -144,6 +212,26 @@ export class ChatNotificationsRepository {
   getChannel(tenantId: string, channelId: string) {
     return this.db.chatChannel.findUnique({ where: { tenantId_id: { tenantId, id: channelId } } });
   }
+  async listChannelMembers(tenantId: string, channelId: string) {
+    const rows = await this.db.chatChannelMembership.findMany({
+      where: { tenantId, channelId, leftAt: null },
+      select: { membershipId: true, role: true },
+    });
+    const memberships = rows.length
+      ? await this.db.tenantMembership.findMany({
+          where: { tenantId, id: { in: rows.map((row) => row.membershipId) } },
+          select: { id: true, membershipDisplayName: true },
+        })
+      : [];
+    const names = new Map(memberships.map((item) => [item.id, item.membershipDisplayName]));
+    return rows
+      .map((row) => ({
+        membershipId: row.membershipId,
+        displayName: names.get(row.membershipId) ?? '',
+        role: row.role,
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }
   async listMessages(tenantId: string, channelId: string, cursor?: string, take = 50) {
     const decoded = decodeTimeCursor(cursor);
     const items = await this.db.chatMessage.findMany({
@@ -164,11 +252,41 @@ export class ChatNotificationsRepository {
     });
     const hasMore = items.length > Math.min(take, 100);
     if (hasMore) items.pop();
-    const last = items.at(-1);
     return {
-      items,
-      nextCursor: hasMore && last ? encodeTimeCursor(last.createdAt, last.id) : null,
+      items: await this.withMedia(tenantId, items),
+      nextCursor:
+        hasMore && items.at(-1)
+          ? encodeTimeCursor(items.at(-1)!.createdAt, items.at(-1)!.id)
+          : null,
     };
+  }
+  /**
+   * Media bubbles need the attachment's kind, size and (for voice notes) duration. Media rows are
+   * fetched once per page instead of per message: a page holds at most 100 messages.
+   */
+  async withMedia(
+    tenantId: string,
+    messages: ChatMessage[],
+  ): Promise<ChatMessageWithMedia[]> {
+    const mediaIds = [...new Set(messages.map((item) => item.mediaId).filter(Boolean))] as string[];
+    const mediaRows = mediaIds.length
+      ? await this.db.mediaObject.findMany({
+          where: { tenantId, id: { in: mediaIds } },
+          select: { id: true, contentType: true, byteSize: true, durationMs: true },
+        })
+      : [];
+    const mediaById = new Map(
+      mediaRows.map((row) => [
+        row.id,
+        {
+          mediaId: row.id,
+          contentType: row.contentType,
+          byteSize: Number(row.byteSize),
+          durationMs: row.durationMs ?? null,
+        } satisfies ChatMessageMedia,
+      ]),
+    );
+    return messages.map((item) => ({ ...item, media: item.mediaId ? mediaById.get(item.mediaId) ?? null : null }));
   }
   createMessage(data: {
     tenantId: string;
@@ -177,9 +295,17 @@ export class ChatNotificationsRepository {
     authorDisplayNameSnapshot: string;
     clientMessageId: string;
     body: string;
+    messageType?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE';
+    mediaId?: string | null;
     replyToMessageId?: string;
   }) {
     return this.db.chatMessage.create({ data });
+  }
+  getMedia(tenantId: string, mediaId: string) {
+    return this.db.mediaObject.findUnique({
+      where: { tenantId_id: { tenantId, id: mediaId } },
+      select: { id: true, ownerMembershipId: true, contentType: true, status: true },
+    });
   }
   findMessageByClientId(tenantId: string, authorMembershipId: string, clientMessageId: string) {
     return this.db.chatMessage.findUnique({
