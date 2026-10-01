@@ -9,7 +9,8 @@
     "types": ["jest", "node"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "expo-file-system/legacy": ["./types/expo-file-system-legacy.d.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", "app.config.ts"]

@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioRecorder,
+} from 'expo-audio';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { File } from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import { getRuntimeConfig } from '@/config/runtime-config';
 import { getAuthenticatedClient, getSessionAccessToken } from '@/features/auth/session-runtime';
 import { validateMessage } from '@/features/chat/chat-composer';
@@ -10,15 +21,30 @@ import {
   markChannelRead,
   sendMessage,
 } from '@/features/chat/chat-queries';
+import {
+  formatDuration,
+  getMediaDownloadUrl,
+  uploadChatMedia,
+  type ChatMediaUpload,
+} from '@/features/chat/chat-media';
 import { initialsFor, timeLabelFor, type Conversation } from '@/features/chat/conversation-list';
 import { createSocketClient } from '@/realtime/socket-client';
 import { createTenantContext } from '@/tenant/tenant-context';
 import { useTenantContextStore } from '@/tenant/tenant-context-store';
 import { tokens } from '@/theme/tokens';
 
+type ChatMessageMedia = {
+  mediaId: string;
+  contentType: string;
+  byteSize: number;
+  durationMs?: number | null;
+};
+
 type ChatMessage = {
   id: string;
   body?: string;
+  messageType?: string;
+  media?: ChatMessageMedia | null;
   createdAt?: string;
   authorMembershipId?: string;
   authorDisplayName?: string;
@@ -44,6 +70,135 @@ const clockLabel = (iso?: string): string => {
   return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
 };
 
+const GALLERY_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4'] as const;
+
+const resolveGalleryContentType = (mimeType?: string | null): ChatMediaUpload['contentType'] => {
+  if (mimeType && (GALLERY_CONTENT_TYPES as readonly string[]).includes(mimeType))
+    return mimeType as ChatMediaUpload['contentType'];
+  return mimeType?.startsWith('video/') ? 'video/mp4' : 'image/jpeg';
+};
+
+const formatByteSize = (byteSize: number): string => {
+  if (byteSize >= 1_048_576) return `${(byteSize / 1_048_576).toFixed(1)} MB`;
+  if (byteSize >= 1024) return `${Math.max(1, Math.round(byteSize / 1024))} KB`;
+  return `${byteSize} B`;
+};
+
+const copyPickedMediaToCache = async (uri: string, mimeType: string): Promise<string> => {
+  const base = LegacyFileSystem.cacheDirectory;
+  if (!base) throw new Error('CACHE_UNAVAILABLE');
+  const extension = mimeType.includes('video') ? 'mp4' : mimeType.includes('png') ? 'png' : 'jpg';
+  const target = `${base}chat-media-${Date.now()}.${extension}`;
+  await LegacyFileSystem.copyAsync({ from: uri, to: target });
+  return target;
+};
+
+/**
+ * Download urls are signed and short-lived; caching them per mediaId keeps a scrolled-back
+ * conversation from re-signing the same attachment on every re-render.
+ */
+const downloadUrlCache = new Map<string, string>();
+
+const useSignedMediaUrl = (mediaId: string | undefined): string | undefined => {
+  const context = useTenantContextStore((state) => state.context);
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    if (!mediaId || !context) return;
+    const cached = downloadUrlCache.get(mediaId);
+    if (cached) {
+      setUrl(cached);
+      return;
+    }
+    let active = true;
+    void getAuthenticatedClient()
+      .then((client) => getMediaDownloadUrl(client, context.tenantId, mediaId))
+      .then((result) => {
+        downloadUrlCache.set(mediaId, result.url);
+        if (active) setUrl(result.url);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [mediaId, context]);
+  return url;
+};
+
+const ImageBubble = ({ mediaId }: { mediaId: string }) => {
+  const url = useSignedMediaUrl(mediaId);
+  if (!url) return <Text style={styles.mediaPending}>Đang tải ảnh...</Text>;
+  return <Image source={{ uri: url }} style={styles.mediaImage} resizeMode="cover" />;
+};
+
+const VideoBubble = ({ mediaId }: { mediaId: string }) => {
+  const url = useSignedMediaUrl(mediaId);
+  if (!url) return <Text style={styles.mediaPending}>Đang tải video...</Text>;
+  return <VideoReadyBubble uri={url} />;
+};
+
+const VideoReadyBubble = ({ uri }: { uri: string }) => {
+  const player = useVideoPlayer({ uri });
+  return <VideoView player={player} style={styles.mediaVideo} />;
+};
+
+const VoiceBubble = ({ mediaId, durationMs }: { mediaId: string; durationMs?: number | null }) => {
+  const url = useSignedMediaUrl(mediaId);
+  if (!url) return <Text style={styles.mediaPending}>Đang tải tin nhắn thoại...</Text>;
+  return <VoiceReadyBubble uri={url} durationMs={durationMs} />;
+};
+
+const VoiceReadyBubble = ({ uri, durationMs }: { uri: string; durationMs?: number | null }) => {
+  const player = useAudioPlayer({ uri });
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    const subscription = player.addListener('playbackStatusUpdate', (status) => {
+      if (status.didJustFinish) setPlaying(false);
+    });
+    return () => subscription.remove();
+  }, [player]);
+  const toggle = () => {
+    if (playing) {
+      player.pause();
+      setPlaying(false);
+    } else {
+      player.play();
+      setPlaying(true);
+    }
+  };
+  return (
+    <View style={styles.voiceRow}>
+      <Pressable
+        testID="chat.voice.toggle"
+        accessibilityRole="button"
+        accessibilityLabel={playing ? 'Tạm dừng tin nhắn thoại' : 'Phát tin nhắn thoại'}
+        onPress={toggle}
+        style={({ pressed }) => [styles.voiceButton, pressed && styles.mediaPressed]}
+      >
+        <Text style={styles.voiceGlyph}>{playing ? '❚❚' : '▶'}</Text>
+      </Pressable>
+      <Text style={styles.voiceDuration}>{formatDuration(durationMs)}</Text>
+    </View>
+  );
+};
+
+const FileBubble = ({ mediaId, byteSize }: { mediaId: string; byteSize: number }) => {
+  const url = useSignedMediaUrl(mediaId);
+  const open = () => {
+    if (url) void Linking.openURL(url);
+  };
+  return (
+    <Pressable
+      testID="chat.file.download"
+      accessibilityRole="button"
+      accessibilityLabel={`Tải tệp đính kèm, dung lượng ${formatByteSize(byteSize)}`}
+      onPress={open}
+      style={({ pressed }) => [styles.fileRow, pressed && styles.mediaPressed]}
+    >
+      <Text style={styles.fileText}>📎 Tệp đính kèm · {formatByteSize(byteSize)}</Text>
+    </Pressable>
+  );
+};
+
 export default function ConversationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ channelId: string }>();
@@ -55,7 +210,15 @@ export default function ConversationScreen() {
   const [nextCursor, setNextCursor] = useState<string>();
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string>();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const recordSecondsRef = useRef(0);
+  const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   useEffect(() => {
     if (!context || !channelId) return;
@@ -110,6 +273,13 @@ export default function ConversationScreen() {
     };
   }, [context, channelId]);
 
+  useEffect(
+    () => () => {
+      if (recordTimer.current) clearInterval(recordTimer.current);
+    },
+    [],
+  );
+
   const loadOlder = useCallback(async () => {
     if (!context || !nextCursor) return;
     const client = await getAuthenticatedClient();
@@ -143,6 +313,115 @@ export default function ConversationScreen() {
     }
   }, [context, channelId, draft]);
 
+  const sendMedia = useCallback(
+    async (media: ChatMediaUpload) => {
+      if (!context || !channelId || uploading) return;
+      setUploading(true);
+      setUploadProgress(0);
+      try {
+        const client = await getAuthenticatedClient();
+        const stamp = Date.now();
+        const { mediaId } = await uploadChatMedia(client, context.tenantId, media, {
+          idempotencyKey: `chat-media-${stamp}`,
+          onProgress: setUploadProgress,
+        });
+        const created = (await sendMessage(client, context.tenantId, channelId, {
+          clientMessageId: `mobile-${stamp}`,
+          body: draft.trim(),
+          mediaId,
+          idempotencyKey: `chat-${stamp}`,
+        })) as ChatMessage;
+        setMessages((current) => mergeMessages(current, [created]));
+        setDraft('');
+        setError(undefined);
+      } catch {
+        setError('Chưa gửi được media. Thử lại nhé.');
+      } finally {
+        setUploading(false);
+        setUploadProgress(0);
+      }
+    },
+    [context, channelId, draft, uploading],
+  );
+
+  const pickMedia = useCallback(async () => {
+    setMenuOpen(false);
+    if (!context) return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        quality: 0.8,
+      });
+      const asset = result.assets?.[0];
+      if (result.canceled || !asset) return;
+      // The photo picker can hand back a content:// URI which the File API and XHR body streaming
+      // cannot read; copy it into cache so the upload always works from a real file path.
+      const uri = asset.uri.startsWith('file://')
+        ? asset.uri
+        : await copyPickedMediaToCache(asset.uri, asset.mimeType ?? 'media');
+      const file = new File(uri);
+      await sendMedia({
+        uri,
+        contentType: resolveGalleryContentType(asset.mimeType),
+        // The picker re-encodes with quality < 1, so the cache file's real size is what gets PUT;
+        // asset.fileSize is the original's and would fail the server's size validation.
+        byteSize: file.size || asset.fileSize || 0,
+        durationMs: asset.duration ? Math.round(asset.duration * 1000) : undefined,
+      });
+    } catch {
+      setError('Chưa gửi được media. Thử lại nhé.');
+    }
+  }, [context, sendMedia]);
+
+  const startRecording = useCallback(async () => {
+    setMenuOpen(false);
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        setError('Cần quyền micrô để ghi âm.');
+        return;
+      }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      recordSecondsRef.current = 0;
+      setRecordSeconds(0);
+      setRecording(true);
+      recordTimer.current = setInterval(() => {
+        recordSecondsRef.current += 1;
+        setRecordSeconds(recordSecondsRef.current);
+      }, 1000);
+    } catch {
+      setError('Không bắt đầu ghi âm được. Thử lại nhé.');
+    }
+  }, [recorder]);
+
+  const finishRecording = useCallback(
+    async (send: boolean) => {
+      if (recordTimer.current) {
+        clearInterval(recordTimer.current);
+        recordTimer.current = null;
+      }
+      setRecording(false);
+      try {
+        await recorder.stop();
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+        const uri = recorder.uri;
+        if (!send || !uri) return;
+        const file = new File(uri);
+        await sendMedia({
+          uri,
+          contentType: 'audio/mp4',
+          byteSize: file.size,
+          durationMs: Math.max(1000, recordSecondsRef.current * 1000),
+        });
+      } catch {
+        setError('Chưa gửi được bản ghi âm. Thử lại nhé.');
+      }
+    },
+    [recorder, sendMedia],
+  );
+
   const title = channel?.name ?? 'Trò chuyện';
 
   /**
@@ -160,6 +439,11 @@ export default function ConversationScreen() {
           isOwn: Boolean(context) && item.authorMembershipId === context?.membershipId,
           startsRun: previous?.authorMembershipId !== item.authorMembershipId,
           endsRun: next?.authorMembershipId !== item.authorMembershipId,
+          isMedia:
+            Boolean(item.media) &&
+            item.messageType !== 'TEXT' &&
+            item.messageType !== 'SYSTEM' &&
+            Boolean(item.messageType),
         };
       }),
     [messages, context],
@@ -191,6 +475,15 @@ export default function ConversationScreen() {
               : ''}
           </Text>
         </View>
+        <Pressable
+          testID="chat.members"
+          accessibilityRole="button"
+          accessibilityLabel="Xem thành viên"
+          onPress={() => router.push(`/chat/${channelId}/members`)}
+          style={({ pressed }) => [styles.membersButton, pressed && styles.membersPressed]}
+        >
+          <Text style={styles.membersText}>Thành viên</Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -208,7 +501,7 @@ export default function ConversationScreen() {
         ) : null}
 
         {decorated.length ? (
-          decorated.map(({ item, isOwn, startsRun, endsRun }) => (
+          decorated.map(({ item, isOwn, startsRun, endsRun, isMedia }) => (
             <View
               key={item.id}
               style={[
@@ -222,12 +515,31 @@ export default function ConversationScreen() {
                   styles.bubble,
                   isOwn ? styles.bubbleOwn : styles.bubbleOther,
                   startsRun && (isOwn ? styles.bubbleOwnFirst : styles.bubbleOtherFirst),
+                  isMedia && styles.bubbleMedia,
                 ]}
               >
                 {!isOwn && startsRun ? (
                   <Text style={styles.author}>{item.authorDisplayName ?? 'Thành viên'}</Text>
                 ) : null}
-                <Text style={[styles.body, isOwn && styles.bodyOwn]}>{item.body}</Text>
+                {isMedia && item.media ? (
+                  <View style={styles.mediaWrap}>
+                    {item.messageType === 'IMAGE' ? <ImageBubble mediaId={item.media.mediaId} /> : null}
+                    {item.messageType === 'VIDEO' ? <VideoBubble mediaId={item.media.mediaId} /> : null}
+                    {item.messageType === 'AUDIO' ? (
+                      <VoiceBubble mediaId={item.media.mediaId} durationMs={item.media.durationMs} />
+                    ) : null}
+                    {item.messageType === 'FILE' ? (
+                      <FileBubble mediaId={item.media.mediaId} byteSize={item.media.byteSize} />
+                    ) : null}
+                    {item.body ? (
+                      <Text style={[styles.body, isOwn && styles.bodyOwn, styles.caption]}>
+                        {item.body}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : (
+                  <Text style={[styles.body, isOwn && styles.bodyOwn]}>{item.body}</Text>
+                )}
                 {endsRun ? (
                   <Text style={[styles.time, isOwn && styles.timeOwn]}>
                     {clockLabel(item.createdAt)}
@@ -247,33 +559,97 @@ export default function ConversationScreen() {
         </Text>
       ) : null}
 
-      <View style={styles.composer}>
-        <TextInput
-          testID="chat.composer"
-          accessibilityLabel="Soạn tin nhắn"
-          value={draft}
-          onChangeText={setDraft}
-          placeholder="Nhắn tin..."
-          placeholderTextColor={tokens.color.muted}
-          multiline
-          style={styles.input}
-        />
-        <Pressable
-          testID="chat.send"
-          accessibilityRole="button"
-          accessibilityLabel="Gửi tin nhắn"
-          accessibilityState={{ disabled: !draft.trim() }}
-          disabled={!draft.trim()}
-          onPress={() => void submit()}
-          style={({ pressed }) => [
-            styles.send,
-            !draft.trim() && styles.sendDisabled,
-            pressed && styles.sendPressed,
-          ]}
-        >
-          <Text style={styles.sendText}>➤</Text>
-        </Pressable>
-      </View>
+      {uploading ? (
+        <Text testID="chat.upload-progress" style={styles.uploading}>
+          Đang gửi media... {uploadProgress}%
+        </Text>
+      ) : null}
+
+      {recording ? (
+        <View testID="chat.recording" style={styles.recordingRow}>
+          <Text style={styles.recordingText}>● Đang ghi âm {recordSeconds}s</Text>
+          <Pressable
+            testID="chat.record.cancel"
+            accessibilityRole="button"
+            accessibilityLabel="Huỷ ghi âm"
+            onPress={() => void finishRecording(false)}
+            style={({ pressed }) => [styles.recordCancelButton, pressed && styles.mediaPressed]}
+          >
+            <Text style={styles.recordCancelText}>Huỷ</Text>
+          </Pressable>
+          <Pressable
+            testID="chat.record.stop"
+            accessibilityRole="button"
+            accessibilityLabel="Dừng và gửi bản ghi âm"
+            onPress={() => void finishRecording(true)}
+            style={({ pressed }) => [styles.recordSendButton, pressed && styles.mediaPressed]}
+          >
+            <Text style={styles.recordSendText}>Dừng và gửi</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          {menuOpen ? (
+            <View testID="chat.attach-menu" style={styles.attachMenu}>
+              <Pressable
+                testID="chat.attach.gallery"
+                accessibilityRole="button"
+                accessibilityLabel="Gửi ảnh hoặc video"
+                onPress={() => void pickMedia()}
+                style={({ pressed }) => [styles.attachOption, pressed && styles.mediaPressed]}
+              >
+                <Text style={styles.attachText}>🖼 Ảnh / Video</Text>
+              </Pressable>
+              <Pressable
+                testID="chat.attach.record"
+                accessibilityRole="button"
+                accessibilityLabel="Ghi âm tin nhắn"
+                onPress={() => void startRecording()}
+                style={({ pressed }) => [styles.attachOption, pressed && styles.mediaPressed]}
+              >
+                <Text style={styles.attachText}>🎤 Ghi âm</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <View style={styles.composer}>
+            <Pressable
+              testID="chat.attach"
+              accessibilityRole="button"
+              accessibilityLabel="Gửi media"
+              accessibilityState={{ expanded: menuOpen }}
+              onPress={() => setMenuOpen((open) => !open)}
+              style={({ pressed }) => [styles.attachButton, pressed && styles.mediaPressed]}
+            >
+              <Text style={styles.attachGlyph}>＋</Text>
+            </Pressable>
+            <TextInput
+              testID="chat.composer"
+              accessibilityLabel="Soạn tin nhắn"
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Nhắn tin..."
+              placeholderTextColor={tokens.color.muted}
+              multiline
+              style={styles.input}
+            />
+            <Pressable
+              testID="chat.send"
+              accessibilityRole="button"
+              accessibilityLabel="Gửi tin nhắn"
+              accessibilityState={{ disabled: !draft.trim() }}
+              disabled={!draft.trim()}
+              onPress={() => void submit()}
+              style={({ pressed }) => [
+                styles.send,
+                !draft.trim() && styles.sendDisabled,
+                pressed && styles.sendPressed,
+              ]}
+            >
+              <Text style={styles.sendText}>➤</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -314,6 +690,15 @@ const styles = StyleSheet.create({
   headerBody: { flex: 1 },
   headerTitle: { color: tokens.color.ink, fontSize: tokens.typography.heading, fontWeight: '800' },
   headerMeta: { color: tokens.color.muted, fontSize: tokens.typography.label, marginTop: 2 },
+  membersButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: tokens.color.primarySoft,
+    paddingHorizontal: tokens.spacing.md,
+  },
+  membersPressed: { opacity: 0.82 },
+  membersText: { color: tokens.color.primary, fontSize: tokens.typography.label, fontWeight: '800' },
 
   listContent: { padding: tokens.spacing.md, gap: 2 },
   older: { alignSelf: 'center', padding: tokens.spacing.md },
@@ -330,6 +715,7 @@ const styles = StyleSheet.create({
     paddingVertical: tokens.spacing.sm,
     borderRadius: 18,
   },
+  bubbleMedia: { paddingHorizontal: tokens.spacing.sm },
   bubbleOwn: { backgroundColor: tokens.color.primary, borderBottomRightRadius: 6 },
   bubbleOther: {
     backgroundColor: tokens.color.surface,
@@ -347,6 +733,31 @@ const styles = StyleSheet.create({
   },
   body: { color: tokens.color.ink, fontSize: tokens.typography.body, lineHeight: 21 },
   bodyOwn: { color: tokens.color.inkInverted },
+  caption: { marginTop: tokens.spacing.xs },
+  mediaWrap: { gap: tokens.spacing.xs },
+  mediaPending: { color: tokens.color.muted, fontSize: tokens.typography.bodySmall },
+  mediaPressed: { opacity: 0.82 },
+  mediaImage: { width: 220, height: 200, borderRadius: 12 },
+  mediaVideo: { width: 220, height: 200, borderRadius: 12, backgroundColor: tokens.color.canvas },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm },
+  voiceButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: tokens.color.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceGlyph: { color: tokens.color.primary, fontSize: 15, fontWeight: '800' },
+  voiceDuration: { color: tokens.color.ink, fontSize: tokens.typography.bodySmall, fontWeight: '700' },
+  fileRow: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: tokens.spacing.sm,
+    borderRadius: 12,
+    backgroundColor: tokens.color.primarySoft,
+  },
+  fileText: { color: tokens.color.primary, fontSize: tokens.typography.bodySmall, fontWeight: '700' },
   time: { color: tokens.color.muted, fontSize: 11, alignSelf: 'flex-end', marginTop: 2 },
   timeOwn: { color: tokens.color.primaryMuted },
   empty: { color: tokens.color.muted, fontSize: tokens.typography.body, padding: tokens.spacing.lg },
@@ -357,6 +768,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: tokens.spacing.lg,
     paddingBottom: tokens.spacing.sm,
   },
+  uploading: {
+    color: tokens.color.muted,
+    fontSize: tokens.typography.bodySmall,
+    paddingHorizontal: tokens.spacing.lg,
+    paddingBottom: tokens.spacing.xs,
+  },
+  recordingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    padding: tokens.spacing.md,
+    backgroundColor: tokens.color.surface,
+    borderTopWidth: 1,
+    borderTopColor: tokens.color.border,
+  },
+  recordingText: { flex: 1, color: tokens.color.danger, fontSize: tokens.typography.bodySmall, fontWeight: '700' },
+  recordCancelButton: {
+    minHeight: tokens.touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: tokens.spacing.md,
+    borderRadius: tokens.touchTarget / 2,
+    borderWidth: 1,
+    borderColor: tokens.color.border,
+  },
+  recordCancelText: { color: tokens.color.muted, fontWeight: '700' },
+  recordSendButton: {
+    minHeight: tokens.touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: tokens.spacing.md,
+    borderRadius: tokens.touchTarget / 2,
+    backgroundColor: tokens.color.primary,
+  },
+  recordSendText: { color: tokens.color.inkInverted, fontWeight: '800' },
+  attachMenu: {
+    paddingHorizontal: tokens.spacing.md,
+    paddingBottom: tokens.spacing.sm,
+    gap: tokens.spacing.xs,
+    backgroundColor: tokens.color.surface,
+  },
+  attachOption: {
+    minHeight: tokens.touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: tokens.spacing.lg,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.color.surfaceMuted,
+  },
+  attachText: { color: tokens.color.ink, fontSize: tokens.typography.body },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -366,6 +824,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: tokens.color.border,
   },
+  attachButton: {
+    width: tokens.touchTarget,
+    height: tokens.touchTarget,
+    borderRadius: tokens.touchTarget / 2,
+    backgroundColor: tokens.color.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachGlyph: { color: tokens.color.primary, fontSize: 24, fontWeight: '800', marginTop: -2 },
   input: {
     flex: 1,
     minHeight: tokens.touchTarget,

@@ -1,6 +1,38 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import ChatScreen from '@/../app/(tabs)/chat';
 import ConversationScreen from '@/../app/chat/[channelId]';
+
+// The native audio/video modules have no JS fallback under jest-expo; the a11y contract only
+// needs the recorder/player hooks to exist and return inert controllers.
+jest.mock('expo-audio', () => ({
+  RecordingPresets: { HIGH_QUALITY: {} },
+  useAudioRecorder: () => ({
+    prepareToRecordAsync: jest.fn(),
+    record: jest.fn(),
+    stop: jest.fn(),
+    uri: 'file:///recording.m4a',
+  }),
+  useAudioPlayer: () => ({
+    play: jest.fn(),
+    pause: jest.fn(),
+    seeking: false,
+    duration: 0,
+    currentTime: 0,
+    playing: false,
+    addListener: jest.fn(() => jest.fn()),
+  }),
+  requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  setAudioModeAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('expo-video', () => ({
+  useVideoPlayer: () => ({
+    play: jest.fn(),
+    pause: jest.fn(),
+    addListener: jest.fn(() => jest.fn()),
+  }),
+  VideoView: () => null,
+}));
 
 /**
  * Chat is two screens now: a conversation list and the conversation itself. Each has to stand on
@@ -27,5 +59,12 @@ describe('chat accessibility', () => {
   it('disables send until the draft has content, and says so', () => {
     const screen = render(<ConversationScreen />);
     expect(screen.getByLabelText('Gửi tin nhắn')).toBeDisabled();
+  });
+
+  it('exposes the media attach button and names both send options', () => {
+    const screen = render(<ConversationScreen />);
+    fireEvent.press(screen.getByLabelText('Gửi media'));
+    expect(screen.getByLabelText('Gửi ảnh hoặc video')).toBeTruthy();
+    expect(screen.getByLabelText('Ghi âm tin nhắn')).toBeTruthy();
   });
 });

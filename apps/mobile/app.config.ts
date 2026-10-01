@@ -19,6 +19,8 @@ const config: ExpoConfig = {
       'expo-image-picker',
       { photosPermission: 'Cho phep Adsup truy cap thu vien de chon video cham cong.' },
     ],
+    'expo-audio',
+    'expo-video',
     'expo-secure-store',
     'expo-notifications',
   ],

@@ -13,6 +13,7 @@ export const createUploadIntent = (
     purpose: string;
     contentType: string;
     byteSize: number;
+    durationMs?: number;
     checksumSha256: string;
     idempotencyKey: string;
   },
@@ -23,6 +24,7 @@ export const createUploadIntent = (
       purpose: input.purpose,
       contentType: input.contentType,
       byteSize: input.byteSize,
+      ...(input.durationMs ? { durationMs: input.durationMs } : {}),
       checksumSha256: input.checksumSha256,
     },
     idempotencyKey: input.idempotencyKey,
