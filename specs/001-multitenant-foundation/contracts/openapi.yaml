@@ -756,7 +756,10 @@ paths:
     post:
       tags: [Chat]
       operationId: createChannel
-      x-permission: chat.manage
+      description: >-
+        Every active tenant member may create a GROUP or DIRECT channel. BRANCH
+        channels additionally require the chat.manage permission; otherwise 403.
+        A DIRECT request with the same pair reopens the existing channel.
       parameters:
         - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -767,10 +770,27 @@ paths:
             schema: { $ref: '#/components/schemas/CreateChatChannel' }
       responses:
         '201':
-          description: Channel created
+          description: Channel created (or the existing DIRECT channel for the pair)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChatChannel' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /v1/tenants/{tenantId}/channels/{channelId}/members:
+    get:
+      tags: [Chat]
+      operationId: listChannelMembers
+      x-permission: chat.read
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/ChannelId'
+      responses:
+        '200':
+          description: Active members of the channel
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ChatChannelMember' }
   /v1/tenants/{tenantId}/channels/{channelId}/messages:
     get:
       tags: [Chat]
@@ -801,10 +821,16 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [clientMessageId, body]
+              required: [clientMessageId]
               properties:
                 clientMessageId: { type: string, minLength: 8, maxLength: 100 }
-                body: { type: string, minLength: 1, maxLength: 4000 }
+                body:
+                  type: string
+                  maxLength: 4000
+                  description: Caption. Required (non-empty) when the message has no mediaId; may be empty otherwise.
+                mediaId:
+                  allOf: [{$ref: '#/components/schemas/Uuid'}]
+                  description: Optional READY media owned by the sender; determines the message type (image, video, audio, file).
                 replyToMessageId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
       responses:
         '201':
@@ -1266,34 +1292,54 @@ components:
     CreateChatChannel:
       type: object
       additionalProperties: false
-      required: [type, name]
+      required: [type]
       properties:
-        type: { enum: [BRANCH, GROUP] }
-        name: { type: string, minLength: 2, maxLength: 120 }
+        type: { enum: [BRANCH, GROUP, DIRECT] }
+        name: { type: string, minLength: 2, maxLength: 120, description: Required for BRANCH and GROUP; ignored for DIRECT. }
         branchId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
         membershipIds:
           type: array
           uniqueItems: true
           items: { $ref: '#/components/schemas/Uuid' }
+          description: DIRECT requires exactly one other member; GROUP lists initial members.
     ChatChannel:
       type: object
       required: [id, tenantId, type, name, status]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         tenantId: { $ref: '#/components/schemas/Uuid' }
-        type: { enum: [TENANT_GENERAL, BRANCH, GROUP] }
-        name: { type: string }
+        type: { enum: [TENANT_GENERAL, BRANCH, GROUP, DIRECT] }
+        name: { type: string, description: For DIRECT channels the viewer-relative peer display name. }
         status: { enum: [ACTIVE, ARCHIVED] }
+    ChatChannelMember:
+      type: object
+      required: [membershipId, displayName, role]
+      properties:
+        membershipId: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string }
+        role: { enum: [MODERATOR, MEMBER] }
     ChatMessage:
       type: object
-      required: [id, channelId, authorMembershipId, authorDisplayName, body, createdAt]
+      required: [id, channelId, authorMembershipId, authorDisplayName, body, messageType, createdAt]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         channelId: { $ref: '#/components/schemas/Uuid' }
         authorMembershipId: { $ref: '#/components/schemas/Uuid' }
         authorDisplayName: { type: string }
-        body: { type: string }
+        body: { type: string, description: Text body or media caption (empty for uncaptioned media). }
+        messageType: { enum: [TEXT, IMAGE, VIDEO, AUDIO, FILE, SYSTEM] }
+        media:
+          allOf: [{$ref: '#/components/schemas/ChatMessageMedia'}]
+          description: Present only when the message carries an attachment.
         createdAt: { $ref: '#/components/schemas/Timestamp' }
+    ChatMessageMedia:
+      type: object
+      required: [mediaId, contentType, byteSize]
+      properties:
+        mediaId: { $ref: '#/components/schemas/Uuid' }
+        contentType: { type: string }
+        byteSize: { type: integer }
+        durationMs: { type: [integer, 'null'], description: Voice notes only. }
     MessagePage:
       type: object
       required: [items]
@@ -1327,8 +1373,9 @@ components:
         branchId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
         sourceType: { type: string, minLength: 2, maxLength: 80 }
         sourceId: { anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}] }
-        contentType: { enum: [image/jpeg, image/png, image/webp, video/mp4, application/pdf] }
+        contentType: { enum: [image/jpeg, image/png, image/webp, video/mp4, audio/mp4, application/pdf] }
         byteSize: { type: integer, minimum: 1, maximum: 524288000 }
+        durationMs: { type: integer, minimum: 1, maximum: 86400000, description: Recording length for audio uploads. }
         checksumSha256: { type: string, pattern: '^[A-Fa-f0-9]{64}$' }
     MediaUploadIntent:
       type: object

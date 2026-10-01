@@ -9,7 +9,7 @@ describe('OpenAPI quality gate', () => {
     expect((document.components as Record<string, unknown>).schemas).toBeTypeOf('object');
   });
 
-  it('conforms all 48 operations to idempotency, field, status and cursor decisions', async () => {
+  it('conforms all 49 operations to idempotency, field, status and cursor decisions', async () => {
     const document = await loadOpenApiDocument();
     const paths = document.paths as Record<string, Record<string, Operation>>;
     const operations = Object.entries(paths).flatMap(([path, item]) =>
@@ -17,10 +17,10 @@ describe('OpenAPI quality gate', () => {
         .filter(([method]) => methods.has(method))
         .map(([method, operation]) => ({ path, method, operation })),
     );
-    expect(operations).toHaveLength(48);
+    expect(operations).toHaveLength(49);
     const ids = operations.map(({ operation }) => operation.operationId);
     expect(ids.every(Boolean)).toBe(true);
-    expect(new Set(ids)).toHaveProperty('size', 48);
+    expect(new Set(ids)).toHaveProperty('size', 49);
 
     const idempotentOperations = new Set([
       'authenticateWithGoogle',
@@ -100,7 +100,9 @@ describe('OpenAPI quality gate', () => {
     }
     const message = bodySchema('sendMessage');
     expect(message.properties?.clientMessageId).toMatchObject({ minLength: 8, maxLength: 100 });
-    expect(message.properties?.body).toMatchObject({ minLength: 1, maxLength: 4000 });
+    expect(message.properties?.body).toMatchObject({ maxLength: 4000 });
+    expect(message.required).toEqual(['clientMessageId']);
+    expect(message.properties?.mediaId).toMatchObject({ allOf: [{ $ref: '#/components/schemas/Uuid' }] });
 
     const expectedStatuses: Record<string, string> = {
       acceptInvitation: '201',
