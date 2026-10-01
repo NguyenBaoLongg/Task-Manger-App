@@ -23,6 +23,10 @@ approval workflow. Không implement cho tới khi spec/clarify/plan/tasks hoàn 
 - Q: Bot nhắc check-in trước ca hoạt động thế nào? → A: Trước giờ bắt đầu mỗi ca 15 phút theo múi giờ tenant, worker tìm nhân viên có lịch ca đó nhưng chưa check-in, không OFF/nghỉ hợp lệ, rồi phát một thông báo tenant/branch-scoped tag tên những người còn thiếu check-in. Reminder phải có dedupe key theo tenant, cơ sở, ngày, ca và lead time để retry không gửi trùng.
 - Q: Bot có cảnh báo lần cuối trước mốc phạt thiếu check-in không? → A: Có. Khoảng một tiếng trước mốc 12:00, mặc định 11:00 theo múi giờ tenant, worker gửi cảnh báo check-in lần cuối cho nhân viên có lịch làm trong ngày nhưng vẫn chưa check-in video. Nếu đến 12:00 vẫn không có check-in và không phải OFF/nghỉ hợp lệ thì mặc định ngày đó bị xem là không làm, đồng thời tạo lỗi không check-in/phạt theo policy; correction hoặc check-in rất muộn chỉ có thể chứng minh có làm nếu được quy trình hợp lệ chấp nhận và không tự xóa lỗi trước 12:00.
 
+### Session 2026-09-29 (mobile client)
+
+- Q: Mobile có được phép chọn video có sẵn trong máy để check-in không, dù FR-009 hướng tới chống gian lận bằng quay trực tiếp trong app? → A: Chủ sở hữu sản phẩm quyết định CÓ — màn hình check-in video trên mobile có nút "Chọn video có sẵn" bên cạnh nút quay trực tiếp. Nội dung video vẫn phải thể hiện rõ người và khu vực làm việc thực tế (phần nội dung của FR-009 giữ nguyên); chỉ nới lỏng nguồn gốc video. Rủi ro gian lận được bù bằng quy trình review thủ công của FR-011/FR-013 trong MVP.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Đăng ký và giữ lịch ca đúng lịch sử (Priority: P1)

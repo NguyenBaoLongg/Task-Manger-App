@@ -58,7 +58,7 @@ Paths are relative to `apps/mobile/`. Status values:
 |---|---|---|---|---|---|
 | SC-001 | ≥19/20 login+workspace under 60s per device profile | `tests/e2e/auth-workspace-performance.e2e.ts` | 20 per device profile | PASS — phone 20/20 (med 14936 ms), tablet 20/20 (med 15350 ms), release build | — |
 | SC-002 | 100% cross-tenant / out-of-branch requests denied | `tests/integration/auth-workspace.integration.test.ts`, `tests/integration/dashboard-navigation.integration.test.ts`, `tests/integration/attendance-privacy.integration.test.ts`, `tests/integration/notification-privacy.integration.test.ts` | All negative-scope cases in those suites | PASS | — |
-| SC-003 | ≥19/20 Dashboard/action center under 3s per device and data profile | `tests/e2e/dashboard-performance.e2e.ts` | 20 per device profile × `COLD_START`, `WARM_CACHE`, `DEGRADED_NETWORK` | **NOT MEASURABLE AS WRITTEN** — the harness reports phone `WARM_CACHE` 20/20 (med 423 ms), `COLD_START` 0/20 (med 6867 ms), `DEGRADED_NETWORK` 0/20 (med 6432 ms), but `device.launchApp` adds ~5.7 s of Detox overhead — more than the whole 3 s budget — and `adb reverse` bypasses the throttled radio so the degraded profile duplicates cold start. The app's own cold start measures 1.3-1.9 s by three other methods | T119, T133 |
+| SC-003 | ≥19/20 Dashboard/action center under 3s per device and data profile | `tests/e2e/dashboard-performance.e2e.ts`, `src/native/adsup-runtime.ts`, Android `AdsupRuntimeModule` | 20 per device profile × `COLD_START`, `WARM_CACHE`, `DEGRADED_NETWORK` | **REMEASURE PENDING** — corrected harness built 2026-08-23: native process/tab monotonic timing ends at the first actionable commit, releaseE2e uses `10.0.2.2` emulator NAT and rejects `adb reverse`. The prior 6-8s launch numbers are superseded; no device was online for the new matrix | T119, T133 |
 | SC-004 | 100% forms render per FormVersion; server errors surfaced | `tests/unit/dynamic-form-renderer.test.ts`, `tests/contract/booking-forms.contract.test.ts` | Schema fixture set in those suites | PASS | — |
 | SC-005 | 100% video check-in samples with permission, preview, progress, retry | `tests/integration/attendance-video-checkin-flow.integration.test.ts`, `tests/unit/attendance-media-upload.test.ts` | Sample set in those suites | PASS under Jest; the camera-denied path also runs on device via `tests/e2e/attendance-approval.e2e.ts`. Real video capture is still not exercised — an emulator has no camera | T114 |
 | SC-006 | 100% booking/ARRIVED/consent/outcome/reschedule/quick action keep scope, state, idempotency | `tests/integration/booking-calendar.integration.test.ts`, `tests/integration/booking-outcome.integration.test.ts`, `tests/integration/booking-arrived-proof-flow.integration.test.ts`, `tests/integration/quick-actions.integration.test.ts`, `tests/unit/mutation-boundary.test.ts` | Boundary case set in those suites | PASS | — |
@@ -85,9 +85,8 @@ Paths are relative to `apps/mobile/`. Status values:
   `73c97db23de11d368abd7c34892bac6bb520b47e40b1bd56db5629f2309d30c6`, on `Detox_A34` (phone) and
   `Detox_Tablet_A34` (tablet, 1280x800). A debug APK ships no bundle and fetches from Metro, so it
   cannot substitute for these rows. Full numbers are in `verification.md`.
-- One row is neither PASS nor FAIL: SC-003. Its harness measures Detox's launch orchestration
-  alongside the app, and that overhead alone exceeds the criterion's budget, so no verdict the
-  harness produces means anything yet. Corrected in `verification.md` on 2026-08-11; the earlier
-  entry there calling it a genuine product miss was wrong.
+- One row is neither PASS nor FAIL: SC-003. The corrected in-app uptime/NAT harness is implemented
+  and native-built, but the required 20-run device/data-profile matrix has not been rerun. The old
+  Detox-orchestration measurements remain historical evidence only.
 - No iOS row in this document is claimed from a device. This host has no macOS or Xcode, so every
   `ios.*` Detox profile is unexecuted.

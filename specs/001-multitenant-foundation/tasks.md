@@ -301,5 +301,6 @@ This is a security foundation checkpoint, not permission to start Module 2.
 
 - [X] T106 Enforce non-null audit reasons at the schema boundary, backfill historical events, supply safe reasons for every audit writer and add migration/live regression coverage per FR-021 (partial)
 
-**Convergence Checkpoint**: Module 1 is complete only when T106 is checked and the next
-`speckit-converge` pass finds no remaining implementation work.
+## Phase 12: Convergence
+
+- [ ] T107 Add a sanctioned media-reference field to the dynamic-form schema vocabulary with validator support and unit/contract coverage, or codify the FORM_EVIDENCE submission linkage as the MVP mechanism, and record FR-015 traceability in `apps/api/src/modules/forms/form-validator.ts`, `apps/api/tests/unit/form-validator.test.ts`, `apps/api/tests/contract/forms.contract.test.ts`, `specs/001-multitenant-foundation/contracts/openapi.yaml` and `specs/001-multitenant-foundation/verification.md` per FR-015 and CR-006 (partial)

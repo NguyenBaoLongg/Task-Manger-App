@@ -120,8 +120,9 @@ the app a user receives. Confirm the difference before trusting any measurement:
 ```
 
 The `releaseE2e` build type exists for this. It inherits `release` — same embedded bundle, same
-signing — and adds only a network security config that permits cleartext to `10.0.2.2`, `localhost`
-and `127.0.0.1`. The shipping `release` variant is untouched, so no test affordance is published.
+signing — and adds a network security config that permits cleartext to `10.0.2.2`, `localhost` and
+`127.0.0.1`. Its native `AdsupRuntime` module also exposes `http://10.0.2.2:3000` as a test-only API
+override. The shipping `release` variant exposes no override, so no test endpoint is published.
 `-PadsupTestBuildType=releaseE2e` moves `assembleAndroidTest` onto the same variant so the
 instrumentation APK matches the app under test:
 
@@ -144,21 +145,20 @@ corepack pnpm --filter @adsup/mobile exec detox test --configuration android.tab
   tests/e2e/auth-workspace-performance.e2e.ts
 ```
 
-### `adb reverse` is mandatory for the release build
+### Release E2E uses emulator NAT, not `adb reverse`
 
-`EXPO_PUBLIC_*` values are inlined into the JS bundle at **build** time. The committed release APK
-embeds `extra.apiBaseUrl = http://localhost:3000`, so setting `EXPO_PUBLIC_API_BASE_URL` when
-invoking Detox changes nothing. On Android `localhost` means the device itself, so every emulator
-that runs the release build needs the port forwarded first:
+SC-003 must cross the emulator's virtual radio so `network speed` and `network delay` can shape the
+same transport the API calls use. The `releaseE2e` BuildConfig therefore supplies
+`http://10.0.2.2:3000`, Android's host-loopback alias. Remove any old reverse mapping before a run:
 
 ```powershell
-adb -s emulator-5554 reverse tcp:3000 tcp:3000
+adb -s emulator-5554 reverse --remove tcp:3000
+adb -s emulator-5554 reverse --list  # must not contain tcp:3000
+adb -s emulator-5554 shell ping -c 1 10.0.2.2
 ```
 
-Without it the app reaches the sign-in screen and then shows
-"Không thể kết nối API", and Detox fails on the next matcher — `workspace.option` — with a
-visibility timeout rather than a connection error. Each emulator needs its own `reverse`; it does
-not carry across devices, and a device restart clears it. Verify with `adb reverse --list`.
+`dashboard-performance.e2e.ts` removes and verifies the mapping itself. Debug/device flows that
+still embed `localhost` may use `adb reverse`, but their result is not valid evidence for SC-003.
 
 ### Emulator preparation
 
@@ -191,6 +191,15 @@ Pass `-w 1` whenever you name more than one suite. Jest otherwise starts a worke
 asks Detox for its own device, so Detox tries to boot additional copies of the same AVD and most
 suites die with `Process exited with code 1`.
 
+### SC-003 timing boundary is inside the app
+
+For `COLD_START` and `DEGRADED_NETWORK`, Android starts the monotonic interval at
+`Process.getStartUptimeMillis()` and the Dashboard ends it one frame after both KPI and action-item
+requests have committed their ready UI. For `WARM_CACHE`, the native interval starts on the
+Dashboard tab press and ends at the next focused actionable commit. The marker is emitted as an
+`ADSUP_SC003` JSON line under the `AdsupStartupMetrics` logcat tag; Detox only waits for and parses
+that marker, so `device.launchApp()`/instrumentation handshake time is not counted.
+
 ### Do not boot the emulator with `-no-snapshot`
 
 An AVD cold-booted with that flag comes up with no `eth0`, and `ping 10.0.2.2` reports "Network is
@@ -203,14 +212,12 @@ after which every later run fails immediately with
 `SyntaxError: Unexpected token ' ', "  " is not valid JSON` from `ExclusiveLockfile`. Delete that
 file and `global-context.json` next to it.
 
-### `DEGRADED_NETWORK` is not currently a real transport constraint
+### `DEGRADED_NETWORK` uses the emulator radio
 
-SC-003's degraded profile shapes the emulator's virtual radio rather than simulating slowness inside
-the app, so no test-only branch is shipped. **But the release build reaches the API through
-`adb reverse`, an adb tunnel that bypasses that radio entirely**, so today the profile changes
-nothing — measured 7,657 ms against 7,584 ms for an unthrottled cold start. To make it bite, rebuild
-with `apiBaseUrl = http://10.0.2.2:3000` (already permitted by the `releaseE2e` network security
-config) and skip the port forward for that profile.
+SC-003 shapes the emulator's virtual radio rather than simulating slowness inside the app, so no
+test-only data or delay branch is shipped. Because every releaseE2e API request now uses
+`10.0.2.2` through emulator NAT, the degraded profile traverses the shaped path. An active
+`adb reverse tcp:3000` is treated as a harness error even though the NAT URL would not use it.
 
 ```powershell
 adb -s emulator-5554 emu network speed edge

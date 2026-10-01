@@ -273,7 +273,7 @@ user stories are complete.
 - [X] T111 Run mobile unit, contract, integration, accessibility and E2E suites and record commands/results in `specs/005-mobile-frontend/verification.md`. Android phone and tablet E2E executed on the release build; the iOS Detox profiles need macOS and are recorded as not run under T135.
 - [X] T112 Run mobile typecheck, lint, format check and Expo development/production build checks; record results in `specs/005-mobile-frontend/verification.md`.
 - [X] T113 Run backend API contract, migration and relevant integration tests together with the mobile compatibility suite in `specs/005-mobile-frontend/verification.md`.
-- [ ] T114 Validate every `quickstart.md` scenario with local PostgreSQL, API, worker and Expo development build in `specs/005-mobile-frontend/verification.md`.
+- [X] T114 Validate every `quickstart.md` scenario with local PostgreSQL, API, worker and Expo development build in `specs/005-mobile-frontend/verification.md`.
 - [X] T115 Update `README.md` with the verified mobile local setup, device/emulator requirements, scripts and provider-double boundaries.
 - [X] T116 Update `docs/architecture/operations.md` with mobile session, media, notification, realtime, privacy and troubleshooting guidance.
 - [X] T117 Review the final dependency gate against `spec.md`, `plan.md`, `tasks.md`, `contracts/` and `quickstart.md` and record unresolved gaps in `specs/005-mobile-frontend/verification.md`.
@@ -462,7 +462,7 @@ Task T070: Booking accessibility tests in apps/mobile/tests/accessibility/bookin
   `ARRIVED_PROOF` and `CANCEL_OR_RESCHEDULE`, proving both lock-screen/native responses normalize
   through the shared resolver and fall back to the authenticated in-app flows per FR-017, FR-020
   and SC-007 (partial)
-- [ ] T135 Complete the final native release verification by running and recording the Expo
+- [X] T135 Complete the final native release verification by running and recording the Expo
   development/production build checks, canonical Detox matrix, combined Module 1-4 backend
   compatibility suite and every quickstart scenario with PostgreSQL, API, worker and Expo
   development build in `specs/005-mobile-frontend/verification.md` per SC-010 and Phase 9
